@@ -36,27 +36,27 @@ class CaptureConfig:
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "CaptureConfig":
         interface = require_non_empty_str(
-            get_optional(data, "interface", "eth0"),
+            get_optional(data, "interface", default="eth0"),
             path=f"{path}.interface",
         )
         snaplen = require_positive_int(
-            get_optional(data, "snaplen", 65535),
+            get_optional(data, "snaplen", default=65535),
             path=f"{path}.snaplen",
         )
         promiscuous = as_bool(
-            get_optional(data, "promiscuous", True),
+            get_optional(data, "promiscuous", default=True),
             path=f"{path}.promiscuous",
         )
         timeout_ms = require_positive_int(
-            get_optional(data, "timeout_ms", 100),
+            get_optional(data, "timeout_ms", default=100),
             path=f"{path}.timeout_ms",
         )
         buffer_size_mb = require_positive_int(
-            get_optional(data, "buffer_size_mb", 10),
+            get_optional(data, "buffer_size_mb", default=10),
             path=f"{path}.buffer_size_mb",
         )
         use_scapy = as_bool(
-            get_optional(data, "use_scapy", True),
+            get_optional(data, "use_scapy", default=True),
             path=f"{path}.use_scapy",
         )
         
@@ -82,20 +82,20 @@ class AggregationConfig:
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "AggregationConfig":
         window_seconds = require_positive_int(
-            get_optional(data, "window_seconds", 5),
+            get_optional(data, "window_seconds", default=5),
             path=f"{path}.window_seconds",
         )
         
-        output_dir_raw = get_optional(data, "output_dir", "/var/lib/argus-v/retina")
+        output_dir_raw = get_optional(data, "output_dir", default="/var/lib/argus-v/retina")
         output_dir = Path(require_non_empty_str(output_dir_raw, path=f"{path}.output_dir"))
         
         max_rows_per_file = require_positive_int(
-            get_optional(data, "max_rows_per_file", 10000),
+            get_optional(data, "max_rows_per_file", default=10000),
             path=f"{path}.max_rows_per_file",
         )
         
         file_rotation_count = require_positive_int(
-            get_optional(data, "file_rotation_count", 10),
+            get_optional(data, "file_rotation_count", default=10),
             path=f"{path}.file_rotation_count",
         )
         
@@ -119,28 +119,27 @@ class HealthConfig:
     
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "HealthConfig":
-        max_drop_rate_percent = as_int(
-            get_optional(data, "max_drop_rate_percent", 1.0),
-            path=f"{path}.max_drop_rate_percent",
-        )
+        max_drop_rate_percent = get_optional(data, "max_drop_rate_percent", default=1.0)
+        if not isinstance(max_drop_rate_percent, (int, float)):
+            raise ValidationError([ValidationIssue(f"{path}.max_drop_rate_percent", "must be a number")])
         
         max_flow_queue_size = require_positive_int(
-            get_optional(data, "max_flow_queue_size", 1000),
+            get_optional(data, "max_flow_queue_size", default=1000),
             path=f"{path}.max_flow_queue_size",
         )
         
         alert_cooldown_seconds = require_positive_int(
-            get_optional(data, "alert_cooldown_seconds", 300),
+            get_optional(data, "alert_cooldown_seconds", default=300),
             path=f"{path}.alert_cooldown_seconds",
         )
         
         enable_drop_monitoring = as_bool(
-            get_optional(data, "enable_drop_monitoring", True),
+            get_optional(data, "enable_drop_monitoring", default=True),
             path=f"{path}.enable_drop_monitoring",
         )
         
         enable_queue_monitoring = as_bool(
-            get_optional(data, "enable_queue_monitoring", True),
+            get_optional(data, "enable_queue_monitoring", default=True),
             path=f"{path}.enable_queue_monitoring",
         )
         
@@ -175,23 +174,23 @@ class RetinaConfig:
         env: Mapping[str, str],
     ) -> "RetinaConfig":
         # Check if retina is enabled
-        retina_data = as_mapping(get_optional(data, "retina", {}), path="$.retina")
-        enabled = as_bool(get_optional(retina_data, "enabled", True), path="$.retina.enabled")
+        retina_data = as_mapping(get_optional(data, "retina", default={}), path="$.retina")
+        enabled = as_bool(get_optional(retina_data, "enabled", default=True), path="$.retina.enabled")
         
         # Load capture config
-        capture_data = as_mapping(get_optional(retina_data, "capture", {}), path="$.retina.capture")
+        capture_data = as_mapping(get_optional(retina_data, "capture", default={}), path="$.retina.capture")
         capture = CaptureConfig.from_mapping(capture_data, path="$.retina.capture")
         
         # Load aggregation config
-        aggregation_data = as_mapping(get_optional(retina_data, "aggregation", {}), path="$.retina.aggregation")
+        aggregation_data = as_mapping(get_optional(retina_data, "aggregation", default={}), path="$.retina.aggregation")
         aggregation = AggregationConfig.from_mapping(aggregation_data, path="$.retina.aggregation")
         
         # Load health config
-        health_data = as_mapping(get_optional(retina_data, "health", {}), path="$.retina.health")
+        health_data = as_mapping(get_optional(retina_data, "health", default={}), path="$.retina.health")
         health = HealthConfig.from_mapping(health_data, path="$.retina.health")
         
         # Load anonymization config
-        anon_salt_raw = get_optional(retina_data, "ip_salt", "default_salt_change_in_production")
+        anon_salt_raw = get_optional(retina_data, "ip_salt", default="default_salt_change_in_production")
         if isinstance(anon_salt_raw, str):
             if anon_salt_raw.startswith("${") and anon_salt_raw.endswith("}"):
                 var_name = anon_salt_raw[2:-1]
