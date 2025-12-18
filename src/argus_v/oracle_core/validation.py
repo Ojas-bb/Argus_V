@@ -43,6 +43,12 @@ def as_int(value: Any, *, path: str) -> int:
     raise ValidationError([ValidationIssue(path, "expected an integer")])
 
 
+def as_float(value: Any, *, path: str) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    raise ValidationError([ValidationIssue(path, "expected a number")])
+
+
 def as_str(value: Any, *, path: str) -> str:
     if isinstance(value, str):
         return value
@@ -61,6 +67,13 @@ def require_positive_int(value: Any, *, path: str) -> int:
     if i <= 0:
         raise ValidationError([ValidationIssue(path, "must be > 0")])
     return i
+
+
+def require_range_float(value: Any, min_val: float, max_val: float, *, path: str) -> float:
+    f = as_float(value, path=path)
+    if not (min_val <= f <= max_val):
+        raise ValidationError([ValidationIssue(path, f"must be between {min_val} and {max_val}")])
+    return f
 
 
 def require_non_negative_int(value: Any, *, path: str) -> int:
