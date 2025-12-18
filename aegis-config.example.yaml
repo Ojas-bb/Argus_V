@@ -1,0 +1,154 @@
+"""Example configuration file for Aegis shield runtime service.
+
+Copy this file to /etc/aegis/config.yaml and customize for your environment.
+This configuration enables the complete Aegis runtime with Mnemosyne model integration,
+Retina CSV polling, and blacklist enforcement with 7-day dry-run mode.
+"""
+
+# Model Management Configuration
+model:
+  # Local paths for storing downloaded models and scalers
+  model_local_path: "/var/lib/argus/models"
+  scaler_local_path: "/var/lib/argus/scalers"
+  
+  # Model validation and caching
+  min_model_age_hours: 1  # Don't use models younger than 1 hour
+  max_model_age_days: 30  # Remove models older than 30 days
+  
+  # Fallback behavior when models are unavailable
+  use_fallback_model: true
+  fallback_prediction_threshold: 0.7
+  
+  # Download timeouts
+  model_download_timeout: 300  # 5 minutes
+  scaler_download_timeout: 60  # 1 minute
+
+# Retina CSV Polling Configuration
+polling:
+  # Poll interval for checking new CSV files
+  poll_interval_seconds: 5
+  
+  # Retina CSV output directory
+  csv_directory: "/var/lib/argus/retina/csv"
+  
+  # File processing settings
+  batch_size: 100  # Process up to 100 files per batch
+  processed_file_suffix: ".processed"  # Suffix for processed files
+  
+  # Error handling
+  max_poll_errors: 5  # Stop polling after 5 consecutive errors
+  poll_retry_delay: 30  # Wait 30 seconds before retry after errors
+
+# Prediction and Scoring Configuration
+prediction:
+  # Feature columns to extract from Retina flows
+  feature_columns:
+    - bytes_in      # Bytes transferred in (anonymized)
+    - bytes_out     # Bytes transferred out (anonymized)  
+    - packets_in    # Packets transferred in
+    - packets_out   # Packets transferred out
+    - duration      # Flow duration in seconds
+    - src_port      # Source port (anonymized)
+    - dst_port      # Destination port (anonymized)
+    - protocol      # Network protocol (TCP/UDP/ICMP)
+  
+  # Anomaly detection thresholds
+  anomaly_threshold: 0.7     # Threshold for flagging as anomaly
+  high_risk_threshold: 0.9   # Threshold for immediate blocking
+  
+  # Processing limits
+  max_flows_per_batch: 1000  # Maximum flows to process in one batch
+  prediction_timeout: 30     # Timeout for prediction operations
+  
+  # Performance tuning
+  use_gpu: false             # Enable GPU acceleration if available
+  enable_parallel_processing: true
+  max_workers: 4             # Maximum worker threads
+
+# Blacklist Enforcement Configuration  
+enforcement:
+  # Dry run mode (7-day mandatory period)
+  dry_run_duration_days: 7           # Mandatory 7-day dry run
+  enforce_after_dry_run: false       # Don't enforce after dry run by default
+  
+  # iptables management
+  iptables_chain_name: "AEGIS-DROP"  # Custom iptables chain for Aegis rules
+  iptables_table: "filter"           # iptables table to use
+  iptables_chain_position: 1         # Position in iptables chain
+  
+  # Blacklist storage and management
+  blacklist_default_ttl_hours: 24    # Default blacklist entry lifetime
+  max_blacklist_entries: 10000       # Maximum blacklist entries
+  blacklist_cleanup_interval: 3600   # Cleanup expired entries every hour
+  
+  # Emergency controls
+  emergency_stop_file: "/var/run/argus/aegis.emergency"  # Emergency stop trigger file
+  allow_manual_overrides: true       # Allow manual blacklist management
+
+# Runtime Service Configuration
+runtime:
+  # Logging configuration
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # Service file paths
+  state_file: "/var/lib/argus/aegis/state.json"    # Service state persistence
+  stats_file: "/var/lib/argus/aegis/stats.json"   # Statistics file
+  pid_file: "/var/run/argus/aegis.pid"            # Process ID file
+  
+  # Service management
+  health_check_port: 8080  # HTTP port for health checks
+  shutdown_timeout: 30     # Graceful shutdown timeout in seconds
+
+# Firebase Integration (Optional)
+# Enable Firebase for cloud sync and remote model storage
+interfaces:
+  firebase:
+    enabled: false  # Set to true to enable Firebase integration
+
+# Uncomment and configure Firebase when ready
+# firebase:
+#   project_id: "your-firebase-project-id"
+#   database_url: "https://your-project.firebaseio.com"
+#   api_key: "${FIREBASE_API_KEY}"  # Use environment variable for security
+#   storage_bucket: "your-project.appspot.com"
+#   service_account_path: "~/.config/gcloud/service-account.json"
+
+# GitHub Integration (Optional)  
+# Enable GitHub for configuration management and updates
+interfaces:
+  github:
+    enabled: false  # Set to true to enable GitHub integration
+
+# Uncomment and configure GitHub when ready
+# github:
+#   base_url: "https://api.github.com"
+#   token: "${GITHUB_TOKEN}"  # Use environment variable for security
+#   user_agent: "argus-v-aegis"
+
+# Deployment Notes:
+# 
+# 1. Raspberry Pi Deployment:
+#    - Ensure /var/lib/argus and /var/run/argus directories exist and are writable
+#    - Run as root or with sufficient privileges for iptables management
+#    - Configure systemd service for automatic startup
+# 
+# 2. Security Considerations:
+#    - Service runs with elevated privileges for iptables management
+#    - IP addresses are anonymized in local storage and logs
+#    - Emergency stop mechanism allows immediate cessation of enforcement
+# 
+# 3. Monitoring:
+#    - Health check available on configured port
+#    - Statistics exported to JSON file for external monitoring
+#    - Detailed logging with structured event tracking
+# 
+# 4. Dry Run Mode:
+#    - Mandatory 7-day dry run period from first start
+#    - All violations logged but not enforced during dry run
+#    - Enable enforcement with enforce_after_dry_run: true after testing
+# 
+# 5. Troubleshooting:
+#    - Check logs for component initialization issues
+#    - Verify Retina CSV files are being generated
+#    - Ensure Mnemosyne models are available in Firebase Storage
+#    - Test blacklist operations manually using CLI commands
