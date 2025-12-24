@@ -151,8 +151,16 @@ class MnemosynePipeline:
             
             # Step 3: Train model
             log_event(logger, "step_3_training", level="info")
-            training_stats = self._trainer.train_model(preprocessed_df)
-            
+
+            contamination = None
+            if isinstance(preprocessing_stats, dict):
+                contamination = preprocessing_stats.get("optimal_contamination")
+
+            if contamination is not None:
+                training_stats = self._trainer.train_model(preprocessed_df, contamination=contamination)
+            else:
+                training_stats = self._trainer.train_model(preprocessed_df)
+
             pipeline_stats['training'] = training_stats
             
             log_event(

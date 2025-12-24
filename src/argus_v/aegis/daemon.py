@@ -233,8 +233,11 @@ class AegisDaemon:
             # Initialize model manager
             model_manager = ModelManager(
                 config=self.config.model,
-                anonymizer=anonymizer
+                anonymizer=anonymizer,
+                feature_columns=self.config.prediction.feature_columns,
             )
+            model_manager.anomaly_threshold = self.config.prediction.anomaly_threshold
+            model_manager.high_risk_threshold = self.config.prediction.high_risk_threshold
             self._components['model_manager'] = model_manager
             
             # Initialize blacklist manager

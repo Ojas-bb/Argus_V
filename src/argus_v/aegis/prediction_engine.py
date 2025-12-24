@@ -482,10 +482,30 @@ class PredictionEngine:
             df = pd.read_csv(
                 csv_file,
                 dtype={
-                    'src_ip': str, 'dst_ip': str, 'src_port': 'Int64', 
-                    'dst_port': 'Int64', 'protocol': str, 'bytes_in': 'Int64',
-                    'bytes_out': 'Int64', 'packets_in': 'Int64', 'packets_out': 'Int64',
-                    'duration': 'Float64'
+                    # Legacy flow schema
+                    "src_ip": str,
+                    "dst_ip": str,
+                    "src_port": "Int64",
+                    "dst_port": "Int64",
+                    "protocol": str,
+                    "bytes_in": "Int64",
+                    "bytes_out": "Int64",
+                    "packets_in": "Int64",
+                    "packets_out": "Int64",
+                    "duration": "Float64",
+
+                    # Retina window/flow schema (csv_rotator.py)
+                    "src_ip_anon": str,
+                    "dst_ip_anon": str,
+                    "packet_count": "Int64",
+                    "byte_count": "Int64",
+                    "duration_seconds": "Float64",
+                    "rate_pps": "Float64",
+                    "rate_bps": "Float64",
+                    "src_flow_packets": "Int64",
+                    "src_flow_bytes": "Int64",
+                    "dst_flow_packets": "Int64",
+                    "dst_flow_bytes": "Int64",
                 },
                 na_values=['', 'null', 'None'],
                 keep_default_na=True
@@ -525,40 +545,98 @@ class PredictionEngine:
             Cleaned DataFrame
         """
         try:
+            original_rows = int(len(df))
+
+            # Normalize between the legacy schema (bytes_in/bytes_out/...) and the
+            # current Retina CSV schema produced by csv_rotator.py.
+            if "src_ip" not in df.columns and "src_ip_anon" in df.columns:
+                df["src_ip"] = df["src_ip_anon"]
+            if "dst_ip" not in df.columns and "dst_ip_anon" in df.columns:
+                df["dst_ip"] = df["dst_ip_anon"]
+
+            if "duration" not in df.columns and "duration_seconds" in df.columns:
+                df["duration"] = df["duration_seconds"]
+
+            if "bytes_in" not in df.columns:
+                if "src_flow_bytes" in df.columns:
+                    df["bytes_in"] = df["src_flow_bytes"]
+                elif "byte_count" in df.columns:
+                    df["bytes_in"] = df["byte_count"]
+                else:
+                    df["bytes_in"] = 0
+
+            if "bytes_out" not in df.columns:
+                if "dst_flow_bytes" in df.columns:
+                    df["bytes_out"] = df["dst_flow_bytes"]
+                else:
+                    df["bytes_out"] = 0
+
+            if "packets_in" not in df.columns:
+                if "src_flow_packets" in df.columns:
+                    df["packets_in"] = df["src_flow_packets"]
+                elif "packet_count" in df.columns:
+                    df["packets_in"] = df["packet_count"]
+                else:
+                    df["packets_in"] = 0
+
+            if "packets_out" not in df.columns:
+                if "dst_flow_packets" in df.columns:
+                    df["packets_out"] = df["dst_flow_packets"]
+                else:
+                    df["packets_out"] = 0
+
             # Remove rows with missing essential data
-            essential_cols = ['src_ip', 'dst_ip', 'bytes_in', 'bytes_out']
-            df = df.dropna(subset=essential_cols, how='any')
-            
+            essential_cols = ["src_ip", "dst_ip", "bytes_in", "bytes_out"]
+            df = df.dropna(subset=essential_cols, how="any")
+
             # Convert numeric columns
-            numeric_cols = ['src_port', 'dst_port', 'bytes_in', 'bytes_out', 
-                          'packets_in', 'packets_out', 'duration']
-            
+            numeric_cols = [
+                "src_port",
+                "dst_port",
+                "bytes_in",
+                "bytes_out",
+                "packets_in",
+                "packets_out",
+                "duration",
+                "packet_count",
+                "byte_count",
+                "rate_pps",
+                "rate_bps",
+                "src_flow_packets",
+                "src_flow_bytes",
+                "dst_flow_packets",
+                "dst_flow_bytes",
+            ]
+
             for col in numeric_cols:
                 if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
             # Ensure timestamp column exists and is valid
-            if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-                df = df.dropna(subset=['timestamp'])
+            if "timestamp" in df.columns:
+                df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                df = df.dropna(subset=["timestamp"])
+            elif "window_start" in df.columns:
+                df["timestamp"] = pd.to_datetime(df["window_start"], errors="coerce")
+                df = df.dropna(subset=["timestamp"])
             else:
-                # Add current timestamp if missing
-                df['timestamp'] = datetime.now()
-            
+                df["timestamp"] = datetime.now()
+
             # Add anonymized IP columns if anonymizer available
             if self.anonymizer:
-                df['src_ip_hash'] = df['src_ip'].apply(self.anonymizer.anonymize_ip)
-                df['dst_ip_hash'] = df['dst_ip'].apply(self.anonymizer.anonymize_ip)
-            
+                df["src_ip_hash"] = df["src_ip"].apply(self.anonymizer.anonymize_ip)
+                df["dst_ip_hash"] = df["dst_ip"].apply(self.anonymizer.anonymize_ip)
+
+            cleaned_rows = int(len(df))
             log_event(
                 logger,
                 "flow_data_cleaned",
                 level="debug",
-                original_rows=len(df),
-                cleaned_rows=len(df),
-                dropped_rows=len(df) - len(df)  # Will calculate properly in real implementation
+                original_rows=original_rows,
+                cleaned_rows=cleaned_rows,
+                dropped_rows=original_rows - cleaned_rows,
             )
-            
+
             return df
             
         except Exception as e:
