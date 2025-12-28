@@ -40,6 +40,18 @@ sudo ./install.sh
 - **Network interface** with promiscuous mode support (for Retina)
 - **Internet access** for package installation (optional: Firebase/GitHub integration)
 
+### License file (NGO deployments)
+
+For managed NGO deployments, place a license file at:
+
+- `/opt/argus/license.txt`
+
+During installation, the installer will:
+
+- verify the license locally (expiry + integrity)
+- attempt HTTPS verification if the license includes a verification endpoint
+- fall back to **DEMO mode** if the verification endpoint is unreachable (offline install)
+
 ## Installation Methods
 
 ### Method 1: Interactive Installation (Recommended)
