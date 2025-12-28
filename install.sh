@@ -461,9 +461,15 @@ install_package() {
         PACKAGE_DIR=$(pwd)
     else
         info "Cannot find local source tree - cloning from GitHub..."
+
+        # Enforce HTTPS for remote installs.
+        if [[ "$REPO_URL" =~ ^http:// ]]; then
+            die "Insecure REPO_URL (HTTP) is not allowed. Use HTTPS: $REPO_URL"
+        fi
+
         local clone_dir="$INSTALL_DIR/source"
         rm -rf "$clone_dir"
-        git clone "$REPO_URL" "$clone_dir" || die "Failed to clone repository: $REPO_URL"
+        git -c http.sslVerify=true clone "$REPO_URL" "$clone_dir" || die "Failed to clone repository: $REPO_URL"
         if [[ -n "$REPO_REF" ]]; then
             git -C "$clone_dir" checkout "$REPO_REF" || die "Failed to checkout ref: $REPO_REF"
         fi
@@ -490,6 +496,37 @@ install_package() {
     pip install --quiet joblib || warn "Failed to install joblib"
     
     success "ARGUS_V package installed"
+}
+
+# Verify deployment license (graceful demo mode if offline)
+check_license() {
+    local license_file="/opt/argus/license.txt"
+    local status_file="$CONFIG_DIR/license_status.json"
+
+    info "Checking deployment license (expected: $license_file)..."
+
+    if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+        warn "Python venv not found yet; skipping license verification"
+        return 0
+    fi
+
+    set +e
+    "$VENV_DIR/bin/python" -m argus_v.licensing verify --path "$license_file" --json > "$status_file" 2>/dev/null
+    local rc=$?
+    set -e
+
+    if [[ $rc -eq 0 ]]; then
+        success "License verified"
+        return 0
+    fi
+
+    if [[ $rc -eq 2 ]]; then
+        warn "License verification could not complete (offline). Continuing in DEMO mode."
+        export ARGUS_V_DEMO_MODE=1
+        return 0
+    fi
+
+    die "License verification failed. See $status_file"
 }
 
 # Generate Retina configuration
@@ -935,6 +972,8 @@ main_install() {
     create_user
     create_directories
     install_package
+
+    check_license
     
     generate_retina_config
     generate_mnemosyne_config
