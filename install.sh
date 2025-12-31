@@ -23,12 +23,22 @@ NC='\033[0m' # No Color
 
 # Installation configuration
 INSTALL_DIR="/opt/argus_v"
+RELEASES_DIR="${INSTALL_DIR}/releases"
+CURRENT_DIR="${INSTALL_DIR}/current"
 CONFIG_DIR="/etc/argus_v"
 DATA_DIR="/var/lib/argus_v"
 LOG_DIR="/var/log/argus_v"
 RUN_DIR="/var/run/argus_v"
+
+# Stable symlink used by systemd units (points at CURRENT_DIR/venv)
 VENV_DIR="${INSTALL_DIR}/venv"
 SYSTEMD_DIR="/etc/systemd/system"
+
+# Auto-update infrastructure
+UPDATE_LOG_DIR="/var/log/argus"
+UPDATE_LOG_FILE="${UPDATE_LOG_DIR}/updates.log"
+UPDATE_CONFIG_FILE="${CONFIG_DIR}/update.conf"
+CRON_ARGUS_UPDATE="/etc/cron.d/argus-v-update"
 
 # Script/runtime metadata
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -424,11 +434,13 @@ create_directories() {
     info "Creating directory structure..."
     
     mkdir -p "$INSTALL_DIR"
+    mkdir -p "$RELEASES_DIR"
     mkdir -p "$CONFIG_DIR"
     mkdir -p "$DATA_DIR"/{retina,models,scalers,aegis}
     mkdir -p "$LOG_DIR"
     mkdir -p "$RUN_DIR"
-    
+    mkdir -p "$UPDATE_LOG_DIR"
+
     # Set permissions
     chown -R "$DEFAULT_INSTALL_USER:$DEFAULT_INSTALL_USER" "$DATA_DIR"
     chown -R "$DEFAULT_INSTALL_USER:$DEFAULT_INSTALL_USER" "$LOG_DIR"
@@ -446,6 +458,11 @@ create_directories() {
     chown root:root "$RETINA_LOG_FILE" "$RETINA_ERR_FILE" "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
     chown "$DEFAULT_INSTALL_USER:$DEFAULT_INSTALL_USER" "$MNEMOSYNE_LOG_FILE" "$MNEMOSYNE_ERR_FILE"
     chmod 0640 "$RETINA_LOG_FILE" "$RETINA_ERR_FILE" "$MNEMOSYNE_LOG_FILE" "$MNEMOSYNE_ERR_FILE" "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
+
+    # Auto-update logging
+    touch "$UPDATE_LOG_FILE"
+    chown root:root "$UPDATE_LOG_FILE"
+    chmod 0640 "$UPDATE_LOG_FILE"
     
     success "Directories created"
 }
@@ -477,24 +494,54 @@ install_package() {
     fi
     
     info "Using package directory: $PACKAGE_DIR"
-    
-    # Create virtual environment
+
+    local pkg_version
+    pkg_version=$(
+        "$PYTHON_BIN" -c "import tomllib; print(tomllib.load(open('$PACKAGE_DIR/pyproject.toml','rb'))['project']['version'])" 2>/dev/null \
+            || true
+    )
+
+    if [[ -z "$pkg_version" ]] && [[ -f "$PACKAGE_DIR/src/argus_v/__init__.py" ]]; then
+        pkg_version=$(grep -E "^__version__" "$PACKAGE_DIR/src/argus_v/__init__.py" | head -n 1 | cut -d '"' -f2 || true)
+    fi
+
+    if [[ -z "$pkg_version" ]]; then
+        die "Unable to determine package version from $PACKAGE_DIR"
+    fi
+
+    local install_tag
+    install_tag="v${pkg_version}"
+
+    local release_dir
+    release_dir="$RELEASES_DIR/argus_v-${install_tag}"
+
+    info "Installing release ${install_tag} into: $release_dir"
+    rm -rf "$release_dir"
+    mkdir -p "$release_dir"
+
     info "Creating Python virtual environment with $PYTHON_BIN..."
-    "$PYTHON_BIN" -m venv "$VENV_DIR" || die "Failed to create virtual environment"
-    
+    "$PYTHON_BIN" -m venv "$release_dir/venv" || die "Failed to create virtual environment"
+
     # Activate venv and install
-    source "$VENV_DIR/bin/activate"
-    
+    source "$release_dir/venv/bin/activate"
+
     # Upgrade pip
     pip install --quiet --upgrade pip setuptools wheel
-    
+
     # Install package
     info "Installing ARGUS_V package (this may take a few minutes)..."
-    pip install --quiet -e "$PACKAGE_DIR" || die "Failed to install ARGUS_V package"
-    
+    pip install --quiet "$PACKAGE_DIR" || die "Failed to install ARGUS_V package"
+
     # Install additional production dependencies
     pip install --quiet joblib || warn "Failed to install joblib"
-    
+
+    deactivate
+
+    echo "$install_tag" > "$release_dir/VERSION"
+
+    ln -sfn "$release_dir" "$CURRENT_DIR"
+    ln -sfn "$CURRENT_DIR/venv" "$VENV_DIR"
+
     success "ARGUS_V package installed"
 }
 
@@ -904,6 +951,65 @@ EOF
     success "Log rotation configured"
 }
 
+install_auto_update() {
+    info "Setting up automatic update infrastructure..."
+
+    if [[ ! -f "$UPDATE_CONFIG_FILE" ]]; then
+        cat > "$UPDATE_CONFIG_FILE" << EOF
+# ARGUS automatic update configuration
+
+# Enable/disable automated updates
+ARGUS_UPDATE_ENABLED=true
+
+# GitHub repository to check for releases (owner/repo)
+ARGUS_UPDATE_REPO="Ojas-bb/Argus_V"
+
+# Cron expression (UTC) checked by argus-update --cron
+# Default: Sunday 02:00 UTC
+ARGUS_UPDATE_SCHEDULE="0 2 * * 0"
+
+# Keep the most recent N releases on disk (includes the active one)
+ARGUS_UPDATE_KEEP_VERSIONS=2
+
+# Systemd services to restart + health check after a successful update
+ARGUS_UPDATE_SERVICES="argus-retina argus-aegis"
+EOF
+        chmod 0644 "$UPDATE_CONFIG_FILE"
+        chown root:root "$UPDATE_CONFIG_FILE"
+    fi
+
+    local src_update=""
+    local src_rollback=""
+
+    if [[ -n "${PACKAGE_DIR:-}" ]]; then
+        src_update="$PACKAGE_DIR/src/argus_v/deploy/update.sh"
+        src_rollback="$PACKAGE_DIR/src/argus_v/deploy/argus-rollback"
+    fi
+
+    if [[ -f "$src_update" ]]; then
+        install -m 0755 "$src_update" /usr/local/bin/argus-update
+        ln -sfn /usr/local/bin/argus-update "$INSTALL_DIR/update.sh"
+    else
+        warn "Update script not found in package source tree; skipping /usr/local/bin/argus-update install"
+    fi
+
+    if [[ -f "$src_rollback" ]]; then
+        install -m 0755 "$src_rollback" /usr/local/bin/argus-rollback
+        ln -sfn /usr/local/bin/argus-rollback "$INSTALL_DIR/argus-rollback"
+    else
+        warn "Rollback script not found in package source tree; skipping /usr/local/bin/argus-rollback install"
+    fi
+
+    cat > "$CRON_ARGUS_UPDATE" << EOF
+CRON_TZ=UTC
+* * * * * root /usr/local/bin/argus-update --cron >/dev/null 2>&1
+EOF
+    chmod 0644 "$CRON_ARGUS_UPDATE"
+    chown root:root "$CRON_ARGUS_UPDATE"
+
+    success "Automatic updates configured (schedule: $(grep -E '^ARGUS_UPDATE_SCHEDULE' "$UPDATE_CONFIG_FILE" | cut -d '=' -f2- | tr -d '"'))"
+}
+
 # Enable and start services
 enable_services() {
     if [[ "$SKIP_SERVICES" == "true" ]]; then
@@ -984,6 +1090,7 @@ main_install() {
     create_aegis_service
     
     setup_logrotate
+    install_auto_update
     enable_services
     
     echo ""
@@ -1045,7 +1152,11 @@ main_uninstall() {
     
     info "Removing logrotate configuration..."
     rm -f "/etc/logrotate.d/argus_v"
-    
+
+    info "Removing auto-update infrastructure..."
+    rm -f "$CRON_ARGUS_UPDATE" || true
+    rm -f /usr/local/bin/argus-update /usr/local/bin/argus-rollback || true
+
     read -p "Remove configuration files from $CONFIG_DIR? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then

@@ -28,8 +28,10 @@ INSTALL_DIR="/opt/argus_v"
 CONFIG_DIR="/etc/argus_v"
 DATA_DIR="/var/lib/argus_v"
 LOG_DIR="/var/log/argus_v"
+UPDATE_LOG_DIR="/var/log/argus"
 RUN_DIR="/var/run/argus_v"
 SYSTEMD_DIR="/etc/systemd/system"
+CRON_ARGUS_UPDATE="/etc/cron.d/argus-v-update"
 
 # Command line flags
 AUTO_YES=false
@@ -188,6 +190,22 @@ remove_logrotate() {
     fi
 }
 
+remove_auto_update() {
+    info "Removing automatic update infrastructure..."
+
+    rm -f "$CRON_ARGUS_UPDATE" || true
+    rm -f /usr/local/bin/argus-update /usr/local/bin/argus-rollback || true
+
+    if [[ -d "$UPDATE_LOG_DIR" ]]; then
+        if [[ "$PURGE" == "true" ]] || confirm "Remove update log directory ($UPDATE_LOG_DIR)?"; then
+            rm -rf "$UPDATE_LOG_DIR"
+            success "Update logs removed"
+        else
+            info "Update logs preserved: $UPDATE_LOG_DIR"
+        fi
+    fi
+}
+
 remove_installation() {
     if [[ -d "$INSTALL_DIR" ]]; then
         info "Removing installation directory: $INSTALL_DIR"
@@ -298,6 +316,7 @@ show_summary() {
     [[ -d "$CONFIG_DIR" ]] && remaining_items+=("Configuration: $CONFIG_DIR")
     [[ -d "$DATA_DIR" ]] && remaining_items+=("Data: $DATA_DIR")
     [[ -d "$LOG_DIR" ]] && remaining_items+=("Logs: $LOG_DIR")
+    [[ -d "$UPDATE_LOG_DIR" ]] && remaining_items+=("Update logs: $UPDATE_LOG_DIR")
     
     if [[ ${#remaining_items[@]} -gt 0 ]]; then
         info "Preserved items:"
@@ -330,6 +349,7 @@ main() {
     stop_services
     remove_service_files
     remove_logrotate
+    remove_auto_update
     clean_iptables
     remove_installation
     remove_runtime

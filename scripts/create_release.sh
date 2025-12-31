@@ -105,8 +105,15 @@ cp "$PROJECT_DIR/LICENSE" "$STAGING_DIR/"
 info "Copying installation scripts..."
 cp "$PROJECT_DIR/install.sh" "$STAGING_DIR/"
 cp "$PROJECT_DIR/uninstall.sh" "$STAGING_DIR/"
+
+# Optional deployment helpers (auto-update)
+[[ -f "$PROJECT_DIR/update.sh" ]] && cp "$PROJECT_DIR/update.sh" "$STAGING_DIR/"
+[[ -f "$PROJECT_DIR/argus-rollback" ]] && cp "$PROJECT_DIR/argus-rollback" "$STAGING_DIR/"
+
 chmod +x "$STAGING_DIR/install.sh"
 chmod +x "$STAGING_DIR/uninstall.sh"
+[[ -f "$STAGING_DIR/update.sh" ]] && chmod +x "$STAGING_DIR/update.sh"
+[[ -f "$STAGING_DIR/argus-rollback" ]] && chmod +x "$STAGING_DIR/argus-rollback"
 
 # Copy training utilities
 info "Copying training utilities..."
