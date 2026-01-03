@@ -101,6 +101,140 @@ die() {
     exit 1
 }
 
+yaml_quote() {
+    local value="${1-}"
+    value=$(printf '%s' "$value" | tr '\r\n' '  ')
+    value=${value//\'/\'\'}
+    printf "'%s'" "$value"
+}
+
+get_validation_python() {
+    if [[ -x "$VENV_DIR/bin/python" ]]; then
+        echo "$VENV_DIR/bin/python"
+        return
+    fi
+
+    if command -v "$PYTHON_BIN" &>/dev/null; then
+        echo "$PYTHON_BIN"
+        return
+    fi
+
+    echo ""
+}
+
+validate_yaml_file() {
+    local file="$1"
+    local py
+    py=$(get_validation_python)
+
+    if [[ -z "$py" ]]; then
+        warn "No Python available for YAML validation; skipping validation for $file"
+        return 0
+    fi
+
+    local out
+    local rc
+
+    set +e
+    out=$("$py" - "$file" 2>&1 <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+p = Path(sys.argv[1])
+yaml.safe_load(p.read_text(encoding="utf-8"))
+PY
+)
+    rc=$?
+    set -e
+
+    if [[ $rc -ne 0 ]]; then
+        error "$out"
+        die "Generated YAML is invalid: $file"
+    fi
+}
+
+validate_retina_config_file() {
+    local file="$1"
+    local py
+    py=$(get_validation_python)
+
+    if [[ -z "$py" ]]; then
+        warn "No Python available for Retina config validation; skipping validation for $file"
+        return 0
+    fi
+
+    local out
+    local rc
+
+    set +e
+    out=$("$py" -c "from argus_v.retina.cli import load_retina_config; load_retina_config('$file')" 2>&1)
+    rc=$?
+    set -e
+
+    if [[ $rc -ne 0 ]]; then
+        error "$out"
+        die "Generated Retina configuration failed validation: $file"
+    fi
+}
+
+validate_mnemosyne_config_file() {
+    local file="$1"
+    local py
+    py=$(get_validation_python)
+
+    if [[ -z "$py" ]]; then
+        warn "No Python available for Mnemosyne config validation; skipping validation for $file"
+        return 0
+    fi
+
+    local out
+    local rc
+
+    set +e
+    out=$("$py" -c "from argus_v.mnemosyne.config import load_mnemosyne_config; load_mnemosyne_config('$file')" 2>&1)
+    rc=$?
+    set -e
+
+    if [[ $rc -ne 0 ]]; then
+        error "$out"
+        die "Generated Mnemosyne configuration failed validation: $file"
+    fi
+}
+
+validate_aegis_config_file() {
+    local file="$1"
+    local py
+    py=$(get_validation_python)
+
+    if [[ -z "$py" ]]; then
+        warn "No Python available for Aegis config validation; skipping validation for $file"
+        return 0
+    fi
+
+    local out
+    local rc
+
+    set +e
+    out=$("$py" -c "from argus_v.aegis.config import load_aegis_config; load_aegis_config('$file')" 2>&1)
+    rc=$?
+    set -e
+
+    if [[ $rc -ne 0 ]]; then
+        error "$out"
+        die "Generated Aegis configuration failed validation: $file"
+    fi
+}
+
+install_validated_config_file() {
+    local tmp_file="$1"
+    local target_file="$2"
+
+    install -m 600 -o root -g root "$tmp_file" "$target_file"
+    rm -f "$tmp_file"
+}
+
 # Print banner
 print_banner() {
     cat << "EOF"
@@ -579,30 +713,33 @@ check_license() {
 # Generate Retina configuration
 generate_retina_config() {
     info "Generating Retina configuration..."
-    
-    cat > "$CONFIG_DIR/retina.yaml" << EOF
+
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    cat > "$tmp_file" << EOF
 # ARGUS_V Retina Configuration
 # Auto-generated on $(date)
 
 retina:
   enabled: $ENABLE_RETINA
-  
+
   # Capture settings
   capture:
-    interface: "$INTERFACE"
+    interface: $(yaml_quote "$INTERFACE")
     snaplen: 65535
     promiscuous: true
     timeout_ms: 100
     buffer_size_mb: 10
     use_scapy: true
-  
+
   # Aggregation settings
   aggregation:
     window_seconds: 5
-    output_dir: "$DEFAULT_RETINA_OUTPUT_DIR"
+    output_dir: $(yaml_quote "$DEFAULT_RETINA_OUTPUT_DIR")
     max_rows_per_file: 10000
     file_rotation_count: 10
-  
+
   # Health monitoring
   health:
     max_drop_rate_percent: 1.0
@@ -610,42 +747,47 @@ retina:
     alert_cooldown_seconds: 300
     enable_drop_monitoring: true
     enable_queue_monitoring: true
-  
+
   # Anonymization - IMPORTANT: Keep this secret!
-  ip_salt: "$IP_SALT"
+  ip_salt: $(yaml_quote "$IP_SALT")
 EOF
-    
-    chmod 600 "$CONFIG_DIR/retina.yaml"
-    chown root:root "$CONFIG_DIR/retina.yaml"
-    
+
+    validate_yaml_file "$tmp_file"
+    validate_retina_config_file "$tmp_file"
+
+    install_validated_config_file "$tmp_file" "$CONFIG_DIR/retina.yaml"
+
     success "Retina configuration created"
 }
 
 # Generate Mnemosyne configuration
 generate_mnemosyne_config() {
     info "Generating Mnemosyne configuration..."
-    
-    cat > "$CONFIG_DIR/mnemosyne.yaml" << EOF
+
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    cat > "$tmp_file" << EOF
 # ARGUS_V Mnemosyne Configuration
 # Auto-generated on $(date)
 
 EOF
-    
+
     if [[ "$ENABLE_FIREBASE" == "true" ]]; then
-        cat >> "$CONFIG_DIR/mnemosyne.yaml" << EOF
+        cat >> "$tmp_file" << EOF
 # Firebase Configuration
 firebase:
-  project_id: "$FIREBASE_PROJECT_ID"
-  storage_bucket: "$FIREBASE_STORAGE_BUCKET"
-  service_account_path: "$FIREBASE_SERVICE_ACCOUNT"
-  training_data_path: "flows/training"
-  model_output_path: "models"
+  project_id: $(yaml_quote "$FIREBASE_PROJECT_ID")
+  storage_bucket: $(yaml_quote "$FIREBASE_STORAGE_BUCKET")
+  service_account_path: $(yaml_quote "$FIREBASE_SERVICE_ACCOUNT")
+  training_data_path: $(yaml_quote "flows/training")
+  model_output_path: $(yaml_quote "models")
   cleanup_threshold_hours: 24
   request_timeout_seconds: 30
 
 EOF
     else
-        cat >> "$CONFIG_DIR/mnemosyne.yaml" << EOF
+        cat >> "$tmp_file" << EOF
 # Firebase Configuration (disabled)
 # Uncomment and configure to enable Firebase integration
 # firebase:
@@ -659,8 +801,8 @@ EOF
 
 EOF
     fi
-    
-    cat >> "$CONFIG_DIR/mnemosyne.yaml" << EOF
+
+    cat >> "$tmp_file" << EOF
 # Preprocessing Configuration
 preprocessing:
   log_transform_features:
@@ -669,7 +811,7 @@ preprocessing:
     - packets_in
     - packets_out
     - duration
-  
+
   feature_normalization_method: standard
   contamination_auto_tune: true
   contamination_range: [0.01, 0.1]
@@ -685,25 +827,33 @@ training:
   validation_split: 0.2
   cross_validation_folds: 3
 EOF
-    
-    chmod 600 "$CONFIG_DIR/mnemosyne.yaml"
-    chown root:root "$CONFIG_DIR/mnemosyne.yaml"
-    
+
+    validate_yaml_file "$tmp_file"
+
+    if [[ "$ENABLE_MNEMOSYNE" == "true" ]]; then
+        validate_mnemosyne_config_file "$tmp_file"
+    fi
+
+    install_validated_config_file "$tmp_file" "$CONFIG_DIR/mnemosyne.yaml"
+
     success "Mnemosyne configuration created"
 }
 
 # Generate Aegis configuration
 generate_aegis_config() {
     info "Generating Aegis configuration..."
-    
-    cat > "$CONFIG_DIR/aegis.yaml" << EOF
+
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    cat > "$tmp_file" << EOF
 # ARGUS_V Aegis Configuration
 # Auto-generated on $(date)
 
 # Model Management Configuration
 model:
-  model_local_path: "$DEFAULT_MODELS_DIR"
-  scaler_local_path: "$DEFAULT_SCALERS_DIR"
+  model_local_path: $(yaml_quote "$DEFAULT_MODELS_DIR")
+  scaler_local_path: $(yaml_quote "$DEFAULT_SCALERS_DIR")
   min_model_age_hours: 1
   max_model_age_days: 30
   use_fallback_model: true
@@ -714,9 +864,9 @@ model:
 # Retina CSV Polling Configuration
 polling:
   poll_interval_seconds: 5
-  csv_directory: "$DEFAULT_RETINA_OUTPUT_DIR"
+  csv_directory: $(yaml_quote "$DEFAULT_RETINA_OUTPUT_DIR")
   batch_size: 100
-  processed_file_suffix: ".processed"
+  processed_file_suffix: $(yaml_quote ".processed")
   max_poll_errors: 5
   poll_retry_delay: 30
 
@@ -731,7 +881,7 @@ prediction:
     - src_port
     - dst_port
     - protocol
-  
+
   anomaly_threshold: 0.7
   high_risk_threshold: 0.9
   max_flows_per_batch: 1000
@@ -740,25 +890,25 @@ prediction:
   enable_parallel_processing: true
   max_workers: 4
 
-# Blacklist Enforcement Configuration  
+# Blacklist Enforcement Configuration
 enforcement:
   dry_run_duration_days: 7
   enforce_after_dry_run: false
-  iptables_chain_name: "AEGIS-DROP"
-  iptables_table: "filter"
+  iptables_chain_name: $(yaml_quote "AEGIS-DROP")
+  iptables_table: $(yaml_quote "filter")
   iptables_chain_position: 1
   blacklist_default_ttl_hours: 24
   max_blacklist_entries: 10000
   blacklist_cleanup_interval: 3600
-  emergency_stop_file: "$RUN_DIR/aegis.emergency"
+  emergency_stop_file: $(yaml_quote "$RUN_DIR/aegis.emergency")
   allow_manual_overrides: true
 
 # Runtime Service Configuration
 runtime:
-  log_level: "INFO"
-  state_file: "$DATA_DIR/aegis/state.json"
-  stats_file: "$DATA_DIR/aegis/stats.json"
-  pid_file: "$RUN_DIR/aegis.pid"
+  log_level: $(yaml_quote "INFO")
+  state_file: $(yaml_quote "$DATA_DIR/aegis/state.json")
+  stats_file: $(yaml_quote "$DATA_DIR/aegis/stats.json")
+  pid_file: $(yaml_quote "$RUN_DIR/aegis.pid")
   health_check_port: 8080
   shutdown_timeout: 30
 
@@ -767,21 +917,23 @@ interfaces:
   firebase:
     enabled: $ENABLE_FIREBASE
 EOF
-    
-    if [[ "$ENABLE_FIREBASE" == "true" ]]; then
-        cat >> "$CONFIG_DIR/aegis.yaml" << EOF
 
-# Firebase Configuration
-firebase:
-  project_id: "$FIREBASE_PROJECT_ID"
-  storage_bucket: "$FIREBASE_STORAGE_BUCKET"
-  service_account_path: "$FIREBASE_SERVICE_ACCOUNT"
+    if [[ "$ENABLE_FIREBASE" == "true" ]]; then
+        cat >> "$tmp_file" << EOF
+
+# Firebase configuration for artifact storage (not currently consumed by Aegis runtime)
+firebase_storage:
+  project_id: $(yaml_quote "$FIREBASE_PROJECT_ID")
+  storage_bucket: $(yaml_quote "$FIREBASE_STORAGE_BUCKET")
+  service_account_path: $(yaml_quote "$FIREBASE_SERVICE_ACCOUNT")
 EOF
     fi
-    
-    chmod 600 "$CONFIG_DIR/aegis.yaml"
-    chown root:root "$CONFIG_DIR/aegis.yaml"
-    
+
+    validate_yaml_file "$tmp_file"
+    validate_aegis_config_file "$tmp_file"
+
+    install_validated_config_file "$tmp_file" "$CONFIG_DIR/aegis.yaml"
+
     success "Aegis configuration created"
 }
 
