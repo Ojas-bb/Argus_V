@@ -108,6 +108,13 @@ yaml_quote() {
     printf "'%s'" "$value"
 }
 
+# Strip ANSI escape codes from a string
+strip_ansi() {
+    local value="${1-}"
+    # Use sed to remove ANSI escape sequences (ESC followed by [ and ending with letter)
+    printf '%s' "$value" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tr -d '\x1b'
+}
+
 get_validation_python() {
     if [[ -x "$VENV_DIR/bin/python" ]]; then
         echo "$VENV_DIR/bin/python"
@@ -477,6 +484,10 @@ get_interactive_config() {
     # Network interface
     read -p "Network interface to monitor [$DEFAULT_INTERFACE]: " INTERFACE
     INTERFACE=${INTERFACE:-$DEFAULT_INTERFACE}
+    # Strip any ANSI escape codes from user input
+    INTERFACE=$(strip_ansi "$INTERFACE")
+    # Validate it's a valid interface name (alphanumeric, dash, underscore)
+    INTERFACE=$(printf '%s' "$INTERFACE" | tr -cd '[:alnum:]-_')
     
     # Enable components
     read -p "Enable Retina (packet capture)? (Y/n): " ENABLE_RETINA_INPUT
@@ -514,10 +525,21 @@ get_interactive_config() {
         FIREBASE_SERVICE_ACCOUNT=""
     fi
     
-    # IP salt for anonymization
-    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || echo "change_this_salt_in_production_$(date +%s)")
+    # IP salt for anonymization - must be hex-only (0-9, a-f)
+    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
     read -p "IP anonymization salt [randomly generated]: " IP_SALT
     IP_SALT=${IP_SALT:-$RANDOM_SALT}
+    # Sanitize: strip ANSI codes and ensure only hex characters
+    IP_SALT=$(strip_ansi "$IP_SALT")
+    IP_SALT=$(printf '%s' "$IP_SALT" | tr -cd '0123456789abcdefABCDEF')
+    # Ensure it's lowercase and exactly 64 chars (32 bytes hex)
+    IP_SALT=$(printf '%s' "$IP_SALT" | tr '[:upper:]' '[:lower:]')
+    IP_SALT=${IP_SALT:0:64}
+    # Pad if necessary (shouldn't happen but be safe)
+    while [[ ${#IP_SALT} -lt 64 ]]; do
+        IP_SALT="${IP_SALT}${RANDOM_SALT}"
+        IP_SALT=${IP_SALT:0:64}
+    done
     
     echo ""
     info "Configuration summary:"
@@ -548,7 +570,19 @@ get_noninteractive_config() {
     FIREBASE_PROJECT_ID=""
     FIREBASE_STORAGE_BUCKET=""
     FIREBASE_SERVICE_ACCOUNT=""
-    IP_SALT=$(openssl rand -hex 32 2>/dev/null || echo "change_this_salt_in_production_$(date +%s)")
+    
+    # IP salt for anonymization - must be hex-only (0-9, a-f)
+    # Use openssl for cryptographically secure random, fall back to date-based hex
+    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
+    IP_SALT="$RANDOM_SALT"
+    # Ensure it's lowercase and exactly 64 chars (32 bytes hex)
+    IP_SALT=$(printf '%s' "$IP_SALT" | tr '[:upper:]' '[:lower:]')
+    IP_SALT=${IP_SALT:0:64}
+    # Pad if necessary (shouldn't happen but be safe)
+    while [[ ${#IP_SALT} -lt 64 ]]; do
+        IP_SALT="${IP_SALT}${RANDOM_SALT}"
+        IP_SALT=${IP_SALT:0:64}
+    done
 }
 
 # Create system user
@@ -719,7 +753,7 @@ generate_retina_config() {
 
     cat > "$tmp_file" << EOF
 # ARGUS_V Retina Configuration
-# Auto-generated on $(date)
+# Auto-generated on $(LC_ALL=C date)
 
 retina:
   enabled: $ENABLE_RETINA
@@ -769,7 +803,7 @@ generate_mnemosyne_config() {
 
     cat > "$tmp_file" << EOF
 # ARGUS_V Mnemosyne Configuration
-# Auto-generated on $(date)
+# Auto-generated on $(LC_ALL=C date)
 
 EOF
 
@@ -848,7 +882,7 @@ generate_aegis_config() {
 
     cat > "$tmp_file" << EOF
 # ARGUS_V Aegis Configuration
-# Auto-generated on $(date)
+# Auto-generated on $(LC_ALL=C date)
 
 # Model Management Configuration
 model:
