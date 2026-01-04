@@ -50,17 +50,40 @@ class ScalerValidationError(Exception):
 
 class ModelManager:
     """Manages Mnemosyne model and scaler loading with caching and validation."""
-    
-    def __init__(self, config, anonymizer: HashAnonymizer | None = None):
+
+    def __init__(
+        self,
+        config,
+        anonymizer: HashAnonymizer | None = None,
+        feature_columns: list[str] | None = None,
+    ):
         """Initialize model manager.
-        
+
         Args:
             config: Model configuration
             anonymizer: Optional hash anonymizer for IP anonymization
+            feature_columns: Feature columns expected by the model/scaler. If omitted,
+                defaults to the legacy 8-feature flow schema used by existing tests.
         """
         self.config = config
         self.anonymizer = anonymizer or HashAnonymizer(salt="aegis-model-cache")
-        
+
+        self.feature_columns = feature_columns or [
+            "bytes_in",
+            "bytes_out",
+            "packets_in",
+            "packets_out",
+            "duration",
+            "src_port",
+            "dst_port",
+            "protocol",
+        ]
+
+        # Prediction thresholds typically live in the PredictionConfig, but tests
+        # instantiate ModelManager with only ModelConfig. Provide sensible defaults.
+        self.anomaly_threshold = float(getattr(config, "anomaly_threshold", 0.7))
+        self.high_risk_threshold = float(getattr(config, "high_risk_threshold", 0.9))
+
         self._model = None
         self._scaler = None
         self._model_metadata = None
@@ -318,14 +341,24 @@ class ModelManager:
             local_scaler_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Create mock model and scaler for development/testing
+            n_features = max(1, int(len(self.feature_columns)))
             mock_model = IsolationForest(random_state=42)
-            mock_model.fit([[1, 2, 3], [4, 5, 6], [7, 8, 9]])  # Dummy data
-            
-            mock_scaler = type('MockScaler', (), {
-                'transform': lambda x: x,
-                'fit_transform': lambda x: x,
-                'inverse_transform': lambda x: x
-            })()
+            mock_model.fit(np.random.randn(100, n_features))
+
+            class MockScaler:
+                mean_ = np.zeros(n_features)
+                scale_ = np.ones(n_features)
+
+                def transform(self, X):
+                    return X
+
+                def fit_transform(self, X):
+                    return X
+
+                def inverse_transform(self, X):
+                    return X
+
+            mock_scaler = MockScaler()
             
             with open(local_model_path, 'wb') as f:
                 pickle.dump(mock_model, f)
@@ -427,15 +460,20 @@ class ModelManager:
                     )
                     return False
             
-            # Test model with dummy data
-            test_data = np.array([[1, 2, 3], [4, 5, 6]])
-            test_data_scaled = self._scaler.transform(test_data) if self._scaler else test_data
+            n_features = int(getattr(self._model, "n_features_in_", len(self.feature_columns)))
+            n_features = max(1, n_features)
+
+            test_data = np.arange(1, n_features * 2 + 1, dtype=float).reshape(2, n_features)
+            if self._scaler is not None and hasattr(self._scaler, "transform"):
+                test_data_scaled = self._scaler.transform(test_data)
+            else:
+                test_data_scaled = test_data
             
             predictions = self._model.predict(test_data_scaled)
             scores = self._model.decision_function(test_data_scaled)
-            
+
             # Basic sanity checks
-            if len(predictions) != len(test_data):
+            if len(predictions) != len(test_data) or len(scores) != len(test_data):
                 log_event(
                     logger,
                     "model_prediction_length_mismatch",
@@ -491,10 +529,13 @@ class ModelManager:
                     return False
             
             # Test scaler with dummy data
-            test_data = np.array([[1, 2, 3], [4, 5, 6]])
+            n_features = len(getattr(self._scaler, "mean_", [])) or len(self.feature_columns)
+            n_features = max(1, int(n_features))
+            test_data = np.arange(1, n_features * 2 + 1, dtype=float).reshape(2, n_features)
+
             try:
                 scaled_data = self._scaler.transform(test_data)
-                if scaled_data.shape != test_data.shape:
+                if np.asarray(scaled_data).shape != test_data.shape:
                     log_event(
                         logger,
                         "scaler_output_shape_mismatch",
@@ -542,24 +583,33 @@ class ModelManager:
                 )
                 return False
             
-            # Create a simple fallback model
+            n_features = max(1, int(len(self.feature_columns)))
+
+            # Create a simple fallback model.
+            # NOTE: fallback_prediction_threshold is not the same as IsolationForest's
+            # contamination parameter (which must be <= 0.5). Use a conservative default.
             self._model = IsolationForest(
-                contamination=self.config.fallback_prediction_threshold,
-                random_state=42
+                contamination=0.1,
+                random_state=42,
             )
-            
-            # Train on dummy data
-            dummy_data = np.random.randn(100, 8)  # 8 features
+
+            dummy_data = np.random.randn(200, n_features)
             self._model.fit(dummy_data)
-            
-            # Create simple fallback scaler
-            self._scaler = type('FallbackScaler', (), {
-                'transform': lambda x: x,
-                'fit_transform': lambda x: x,
-                'inverse_transform': lambda x: x,
-                'mean_': np.zeros(8),
-                'scale_': np.ones(8)
-            })()
+
+            class FallbackScaler:
+                mean_ = np.zeros(n_features)
+                scale_ = np.ones(n_features)
+
+                def transform(self, X):
+                    return X
+
+                def fit_transform(self, X):
+                    return X
+
+                def inverse_transform(self, X):
+                    return X
+
+            self._scaler = FallbackScaler()
             
             self._load_failures += 1
             
@@ -662,7 +712,7 @@ class ModelManager:
         """
         try:
             # Ensure required columns exist
-            required_cols = self.config.feature_columns
+            required_cols = self.feature_columns
             missing_cols = [col for col in required_cols if col not in flows_df.columns]
             
             if missing_cols:
@@ -705,11 +755,11 @@ class ModelManager:
         # We'll use the absolute value for classification
         abs_score = abs(anomaly_score)
         
-        if abs_score >= self.config.high_risk_threshold:
+        if abs_score >= self.high_risk_threshold:
             return "critical"
-        elif abs_score >= self.config.anomaly_threshold:
+        elif abs_score >= self.anomaly_threshold:
             return "high"
-        elif abs_score >= self.config.anomaly_threshold * 0.5:
+        elif abs_score >= self.anomaly_threshold * 0.5:
             return "medium"
         else:
             return "low"

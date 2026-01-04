@@ -116,14 +116,17 @@ class IsolationForestTrainer:
             cv_folds=cv_folds
         )
         
-        # Use scoring that works well for IsolationForest
+        def _unsupervised_scorer(estimator, X, y=None):  # noqa: ARG001
+            # IsolationForest.score returns the mean score_samples; higher is "more normal".
+            return float(estimator.score(X))
+
         grid_search = GridSearchCV(
             base_estimator,
             param_grid,
             cv=cv_folds,
-            scoring='roc_auc',  # AUC score for anomaly detection
+            scoring=_unsupervised_scorer,
             n_jobs=1,  # Single-threaded for reproducibility
-            verbose=0
+            verbose=0,
         )
         
         # Suppress sklearn warnings about sample weights
@@ -206,71 +209,82 @@ class IsolationForestTrainer:
         
         return evaluation_stats
     
-    def train_model(self, features_df: pd.DataFrame, true_labels: Optional[pd.Series] = None) -> Dict[str, Any]:
+    def train_model(
+        self,
+        features_df: pd.DataFrame,
+        true_labels: Optional[pd.Series] = None,
+        contamination: float | None = None,
+    ) -> Dict[str, Any]:
         """Train IsolationForest model with validation.
-        
+
         Args:
             features_df: Preprocessed feature DataFrame
             true_labels: True anomaly labels (optional)
-            
+            contamination: Optional contamination override to use during training
+
         Returns:
             Dictionary containing training results and statistics
         """
-        # Validate data sufficiency
         is_sufficient, reason = self._validate_data_sufficiency(features_df)
         if not is_sufficient:
             raise ValueError(f"Insufficient data for training: {reason}")
-        
+
         log_event(
             logger,
             "training_started",
             level="info",
             sample_count=len(features_df),
-            feature_count=features_df.shape[1]
+            feature_count=features_df.shape[1],
         )
-        
-        # Split data for training and validation
+
         test_size = self.config.validation_split
-        if len(features_df) < 100:  # Small dataset
+        if len(features_df) < 100:
             test_size = min(0.2, 20 / len(features_df))
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            features_df, true_labels, test_size=test_size,
-            random_state=self.config.random_state
+
+        X_train, X_test, _, y_test = train_test_split(
+            features_df,
+            true_labels,
+            test_size=test_size,
+            random_state=self.config.random_state,
         )
-        
-        # Determine contamination parameter
-        # For training, we'll use a moderate contamination rate
-        min_contam, max_contam = self.config.contamination_range
-        training_contamination = (min_contam + max_contam) / 2
-        
-        # Train model
+
+        if contamination is not None:
+            training_contamination = float(contamination)
+        else:
+            contam_range = getattr(self.config, "contamination_range", None)
+            if contam_range is not None:
+                min_contam, max_contam = contam_range
+                training_contamination = float((min_contam + max_contam) / 2)
+            else:
+                training_contamination = 0.05
+
+        # Keep within sklearn's expected range
+        training_contamination = float(min(max(training_contamination, 0.001), 0.5))
+
         model = self.train_isolation_forest(X_train, training_contamination)
-        
-        # Evaluate on test set
+
         eval_stats = self.evaluate_model(model, X_test, y_test)
-        
-        # Store training statistics
+
         self._training_stats = {
-            'training_samples': len(X_train),
-            'test_samples': len(X_test),
-            'feature_count': features_df.shape[1],
-            'model_parameters': model.get_params(),
-            'training_contamination': training_contamination,
-            'evaluation': eval_stats,
-            'training_timestamp': datetime.now().isoformat(),
-            'random_state': self.config.random_state
+            "training_samples": int(len(X_train)),
+            "test_samples": int(len(X_test)),
+            "feature_count": int(features_df.shape[1]),
+            "model_parameters": model.get_params(),
+            "training_contamination": float(training_contamination),
+            "evaluation": eval_stats,
+            "training_timestamp": datetime.now().isoformat(),
+            "random_state": int(self.config.random_state),
         }
-        
+
         self._best_model = model
-        
+
         log_event(
             logger,
             "training_completed",
             level="info",
-            training_stats=self._training_stats
+            training_stats=self._training_stats,
         )
-        
+
         return self._training_stats
     
     def serialize_model(self, output_path: str, scaler: Any) -> Dict[str, str]:

@@ -30,51 +30,68 @@ class FlowPreprocessor:
         
     def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Prepare feature matrix from flow data.
-        
+
+        By default, this expects the legacy Retina/Aegis flow schema:
+        bytes_in/bytes_out/packets_in/packets_out/duration/src_port/dst_port/protocol.
+
+        For alternate schemas (e.g. Retina window stats), set
+        config.feature_columns to an explicit list.
+
         Args:
             df: DataFrame with flow data
-            
+
         Returns:
             DataFrame with prepared features
         """
-        # Select relevant features for anomaly detection
-        feature_columns = [
-            'bytes_in', 'bytes_out', 'packets_in', 'packets_out', 'duration',
-            'src_port', 'dst_port', 'protocol'
-        ]
-        
+        feature_columns = getattr(self.config, "feature_columns", None)
+        if not feature_columns:
+            feature_columns = [
+                "bytes_in",
+                "bytes_out",
+                "packets_in",
+                "packets_out",
+                "duration",
+                "src_port",
+                "dst_port",
+                "protocol",
+            ]
+
         # Ensure all feature columns exist
         missing_features = [col for col in feature_columns if col not in df.columns]
         if missing_features:
             raise ValueError(f"Missing required features: {missing_features}")
-        
+
         # Create feature matrix
-        features_df = df[feature_columns].copy()
-        
-        # Handle protocol as categorical feature
-        if 'protocol' in features_df.columns:
-            # Convert protocol to numeric (TCP=1, UDP=2, ICMP=3, etc.)
+        features_df = df[list(feature_columns)].copy()
+
+        # Handle protocol as categorical feature (if present)
+        if "protocol" in features_df.columns and features_df["protocol"].dtype == object:
             protocol_map = {
-                'TCP': 1, 'UDP': 2, 'ICMP': 3, 'IGMP': 4, 'OTHER': 5
+                "TCP": 1,
+                "UDP": 2,
+                "ICMP": 3,
+                "IGMP": 4,
+                "OTHER": 5,
             }
-            features_df['protocol'] = features_df['protocol'].map(protocol_map).fillna(5)
-        
-        # Ensure ports are positive integers
-        features_df['src_port'] = features_df['src_port'].abs()
-        features_df['dst_port'] = features_df['dst_port'].abs()
-        
+            features_df["protocol"] = features_df["protocol"].map(protocol_map).fillna(5)
+
+        # Ensure ports are positive integers (if present)
+        for port_col in ("src_port", "dst_port"):
+            if port_col in features_df.columns:
+                features_df[port_col] = features_df[port_col].abs()
+
         # Store feature columns for later use
         self._feature_columns = features_df.columns.tolist()
-        
+
         log_event(
             logger,
             "features_prepared",
             level="info",
             original_rows=len(df),
             feature_count=len(feature_columns),
-            feature_columns=feature_columns
+            feature_columns=list(feature_columns),
         )
-        
+
         return features_df
     
     def apply_log_transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -203,87 +220,104 @@ class FlowPreprocessor:
         return cleaned_df, outlier_stats
     
     def tune_contamination_parameter(self, df: pd.DataFrame) -> Tuple[float, Dict[str, Any]]:
-        """Automatically tune contamination parameter for IsolationForest.
-        
+        """Tune the IsolationForest contamination parameter.
+
+        This is an unsupervised heuristic based on cross-validated estimator scores.
+        The full preprocessing pipeline already gates auto-tuning based on
+        config.min_samples_for_training; this helper also provides a small-sample
+        fallback for direct callers.
+
         Args:
             df: DataFrame with preprocessed features
-            
+
         Returns:
             Tuple of (optimal_contamination, tuning_stats)
         """
         from sklearn.ensemble import IsolationForest
         from sklearn.model_selection import cross_val_score
-        
-        tuning_stats = {
-            'contamination_range': self.config.contamination_range,
-            'scores': {},
-            'best_contamination': None,
-            'best_score': 0.0
-        }
-        
+
         min_contamination, max_contamination = self.config.contamination_range
+
+        # If called directly with very small datasets, fall back to a safe default.
+        min_samples_for_tuning = 50
+        if len(df) < min_samples_for_tuning:
+            selected = float((min_contamination + max_contamination) / 2)
+            return selected, {
+                "auto_tune_enabled": False,
+                "reason": "insufficient_samples",
+                "sample_count": int(len(df)),
+                "selected_contamination": selected,
+                "contamination_range": (float(min_contamination), float(max_contamination)),
+            }
+
+        tuning_stats: Dict[str, Any] = {
+            "contamination_range": (float(min_contamination), float(max_contamination)),
+            "scores": {},
+            "best_contamination": None,
+            "best_score": float("-inf"),
+        }
+
         contamination_values = np.linspace(min_contamination, max_contamination, 10)
-        
-        best_contamination = min_contamination
-        best_score = 0.0
-        
+
+        def _unsupervised_scorer(estimator, X, y=None):  # noqa: ARG001
+            return float(estimator.score(X))
+
+        best_contamination: float | None = None
+
         for contamination in contamination_values:
             try:
-                # Create IsolationForest with current contamination
                 forest = IsolationForest(
-                    contamination=contamination,
+                    contamination=float(contamination),
                     random_state=self.config.random_state,
-                    n_estimators=50,  # Reduced for faster tuning
-                    n_jobs=1  # Single-threaded for reproducibility
+                    n_estimators=50,
+                    n_jobs=1,
                 )
-                
-                # Perform cross-validation (using negative mean scores)
+
                 scores = cross_val_score(
-                    forest, df, cv=min(3, self.config.cross_validation_folds),
-                    scoring='neg_mean_score', n_jobs=1
+                    forest,
+                    df,
+                    cv=min(3, getattr(self.config, "cross_validation_folds", 3)),
+                    scoring=_unsupervised_scorer,
+                    n_jobs=1,
                 )
-                
-                mean_score = scores.mean()
-                tuning_stats['scores'][float(contamination)] = float(mean_score)
-                
-                # Track best contamination
-                if mean_score > best_score:
-                    best_score = mean_score
-                    best_contamination = contamination
-                    
+
+                mean_score = float(scores.mean())
+                tuning_stats["scores"][float(contamination)] = mean_score
+
+                if mean_score > tuning_stats["best_score"]:
+                    tuning_stats["best_score"] = mean_score
+                    best_contamination = float(contamination)
+
             except Exception as e:
                 log_event(
                     logger,
                     "contamination_tuning_failed_for_value",
                     level="warning",
-                    contamination=contamination,
-                    error=str(e)
+                    contamination=float(contamination),
+                    error=str(e),
                 )
-                continue
-        
-        # Ensure we have a valid contamination value
+
         if best_contamination is None:
+            best_contamination = float(min_contamination)
             log_event(
                 logger,
                 "contamination_tuning_failed_using_default",
                 level="warning",
-                default_contamination=min_contamination
+                default_contamination=best_contamination,
             )
-            best_contamination = min_contamination
-        
-        tuning_stats['best_contamination'] = float(best_contamination)
-        tuning_stats['best_score'] = float(best_score)
-        
+
+        tuning_stats["best_contamination"] = float(best_contamination)
+
         log_event(
             logger,
             "contamination_tuning_completed",
             level="info",
             best_contamination=best_contamination,
-            best_score=best_score,
-            values_tested=len(tuning_stats['scores'])
+            best_score=tuning_stats["best_score"],
+            values_tested=len(tuning_stats["scores"]),
         )
-        
-        return best_contamination, tuning_stats
+
+        return float(best_contamination), tuning_stats
     
     def preprocess_pipeline(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """Run the complete preprocessing pipeline.
