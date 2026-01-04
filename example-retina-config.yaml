@@ -1,10 +1,9 @@
 # Example Retina Configuration
-# Place this at /etc/argus-v/retina.yaml for production use
+# Copy to /etc/argus_v/retina.yaml for production use
 
 retina:
   enabled: true
-  interface: "eth0"
-  
+
   # Capture settings
   capture:
     interface: "eth0"
@@ -13,14 +12,14 @@ retina:
     timeout_ms: 100
     buffer_size_mb: 10
     use_scapy: true
-  
+
   # Aggregation settings
   aggregation:
     window_seconds: 5
-    output_dir: "/var/lib/argus-v/retina"
+    output_dir: "/var/lib/argus_v/retina"
     max_rows_per_file: 10000
     file_rotation_count: 10
-  
+
   # Health monitoring
   health:
     max_drop_rate_percent: 1.0
@@ -28,6 +27,6 @@ retina:
     alert_cooldown_seconds: 300
     enable_drop_monitoring: true
     enable_queue_monitoring: true
-  
-  # Anonymization - use environment variable in production
+
+  # Anonymization - use environment variable or change in production
   ip_salt: "retina_default_salt_change_in_production"

@@ -45,6 +45,17 @@ def hash_ip(ip: str, *, salt: str | bytes, prefix: str = "ip_", hex_chars: int =
     return f"{prefix}{digest[:hex_chars]}"
 
 
+class HashAnonymizer:
+    """Helper class for IP anonymization with a fixed salt."""
+
+    def __init__(self, salt: str | bytes):
+        self._salt = salt
+
+    def anonymize_ip(self, ip: str) -> str:
+        """Anonymize an IP address using the fixed salt."""
+        return hash_ip(ip, salt=self._salt)
+
+
 RoundMode = Literal["floor", "nearest"]
 
 

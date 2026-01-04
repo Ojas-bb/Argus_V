@@ -83,7 +83,7 @@ def require_non_negative_int(value: Any, *, path: str) -> int:
     return i
 
 
-def get_optional(mapping: Mapping[str, Any], key: str, *, default: Any = None) -> Any:
+def get_optional(mapping: Mapping[str, Any], key: str, default: Any = None) -> Any:
     return mapping.get(key, default)
 
 
