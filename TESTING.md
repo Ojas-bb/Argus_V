@@ -12,6 +12,11 @@ Run the package validation script:
 ./test_install_package.sh
 ```
 
+**Note**: This script requires `PyYAML` to be installed on the host system:
+```bash
+pip install PyYAML
+```
+
 This validates:
 - ✓ All required files are present
 - ✓ Scripts are executable and have valid syntax
