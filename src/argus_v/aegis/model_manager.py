@@ -27,7 +27,7 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 
 from ..oracle_core.logging import log_event
-from ..oracle_core import HashAnonymizer
+from ..oracle_core import hash_ip
 
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class ModelManager:
     def __init__(
         self,
         config,
-        anonymizer: HashAnonymizer | None = None,
+        anonymizer: Any | None = None,
         feature_columns: list[str] | None = None,
     ):
         """Initialize model manager.
@@ -66,7 +66,7 @@ class ModelManager:
                 defaults to the legacy 8-feature flow schema used by existing tests.
         """
         self.config = config
-        self.anonymizer = anonymizer or HashAnonymizer(salt="aegis-model-cache")
+        self.anonymizer = anonymizer
 
         self.feature_columns = feature_columns or [
             "bytes_in",
