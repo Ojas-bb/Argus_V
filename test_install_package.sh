@@ -8,6 +8,13 @@ set -e
 
 echo "Testing ARGUS_V installation package..."
 
+# Check if PyYAML is installed (required for YAML validation tests)
+if ! python3 -c "import yaml" 2>/dev/null; then
+    echo "✗ PyYAML is required to run this test script."
+    echo "  Please install it: pip install PyYAML"
+    exit 1
+fi
+
 # Test 1: Check required files exist
 echo "✓ Checking required files..."
 required_files=(
