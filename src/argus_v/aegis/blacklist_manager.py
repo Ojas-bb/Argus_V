@@ -24,7 +24,7 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 from ..oracle_core.logging import log_event
-from ..oracle_core.anonymize import HashAnonymizer
+from ..oracle_core import HashAnonymizer
 
 
 logger = logging.getLogger(__name__)
