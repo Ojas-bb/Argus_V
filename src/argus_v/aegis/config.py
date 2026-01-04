@@ -17,19 +17,15 @@ import yaml
 from ..oracle_core.config import (
     FirebaseConfig,
     GitHubConfig,
-    InterfaceToggle,
     ValidationError,
     ValidationIssue,
     as_bool,
-    as_int,
     as_list,
     as_mapping,
     get_optional,
-    get_required,
     require_non_empty_str,
     require_positive_int,
 )
-from ..oracle_core.validation import get_optional as get_optional_any
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +84,6 @@ class ModelConfig:
             path=f"{path}.use_fallback_model"
         )
         
-        import sys
         fallback_prediction_threshold = float(
             get_optional(data, "fallback_prediction_threshold", 0.7)
         )

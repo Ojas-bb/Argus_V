@@ -12,7 +12,6 @@ from .validation import (
     ValidationError,
     ValidationIssue,
     as_bool,
-    as_int,  # noqa: F401
     as_list,
     as_mapping,
     get_optional,
