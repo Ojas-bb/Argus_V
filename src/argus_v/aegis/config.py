@@ -21,7 +21,6 @@ from ..oracle_core.config import (
     ValidationError,
     ValidationIssue,
     as_bool,
-    as_int,
     as_list,
     as_mapping,
     get_optional,

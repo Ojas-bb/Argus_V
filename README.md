@@ -335,7 +335,7 @@ Not open source. Research partnerships: Contact us.
 
 ## Credits
 
-Built by [Your Name] at MIT for [Organization Name].
+Built by R0B0T (OJAS).
 
 Inspired by privacy-first design (Tor, Signal) and academic anomaly detection research.
 
