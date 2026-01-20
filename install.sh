@@ -238,7 +238,7 @@ install_validated_config_file() {
     local tmp_file="$1"
     local target_file="$2"
 
-    install -m 600 -o root -g root "$tmp_file" "$target_file"
+    install -m 644 -o root -g root "$tmp_file" "$target_file"
     rm -f "$tmp_file"
 }
 
@@ -623,8 +623,9 @@ create_directories() {
           "$MNEMOSYNE_LOG_FILE" "$MNEMOSYNE_ERR_FILE" \
           "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
 
-    chown root:root "$RETINA_LOG_FILE" "$RETINA_ERR_FILE" "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
+    chown "$DEFAULT_INSTALL_USER:$DEFAULT_INSTALL_USER" "$RETINA_LOG_FILE" "$RETINA_ERR_FILE"
     chown "$DEFAULT_INSTALL_USER:$DEFAULT_INSTALL_USER" "$MNEMOSYNE_LOG_FILE" "$MNEMOSYNE_ERR_FILE"
+    chown root:root "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
     chmod 0640 "$RETINA_LOG_FILE" "$RETINA_ERR_FILE" "$MNEMOSYNE_LOG_FILE" "$MNEMOSYNE_ERR_FILE" "$AEGIS_LOG_FILE" "$AEGIS_ERR_FILE"
 
     # Auto-update logging
@@ -987,8 +988,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=$DEFAULT_INSTALL_USER
+Group=$DEFAULT_INSTALL_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=$VENV_DIR/bin/python -m argus_v.retina.cli --config $CONFIG_DIR/retina.yaml daemon
@@ -1000,7 +1001,8 @@ StandardError=append:$RETINA_ERR_FILE
 SyslogIdentifier=argus-retina
 
 # Security settings
-NoNewPrivileges=false
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
