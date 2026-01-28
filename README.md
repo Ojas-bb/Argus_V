@@ -1,344 +1,181 @@
----
-
-# 🛡️ ARGUS v0: Offline AI Threat Detection for NGOs
-
-**Privacy-first, AI-powered network security for organizations that can't afford enterprise tools.**
-
-## What is ARGUS?
-
-ARGUS is an offline cybersecurity system that protects your network from ransomware, data theft, and botnet attacks. It runs on a $60 Raspberry Pi, learns your network behavior, and automatically detects threats—all without sending data to the cloud.
-
-**No subscriptions. No cloud dependency. No data exfiltration.**
-
-## Why ARGUS?
-
-| Problem | ARGUS Solution |
-|---------|---|
-| Darktrace costs $50k+/year | ARGUS is free for NGOs |
-| Requires cloud access | Runs completely offline |
-| Complex to deploy | 5-minute installation |
-| Privacy concerns | All data stays on your network |
-| Not designed for low bandwidth | Works on any network |
-
-## Quick Start (5 Minutes)
-
-### Requirements
-- Raspberry Pi 4 (8GB RAM)
-- Ethernet cable + internet connection
-- microSD card (32GB+)
-- Firebase account (free)
-
-### Installation
-
-```bash
-# 1. Download and run installer
-curl -fsSL https://github.com/Ojas-bb/Argus_V/releases/download/v0.1.0/install.sh | bash
-
-# 2. Answer setup questions (Firebase credentials, network interface)
-# 3. Done! Services start automatically
-# 4. Verify: systemctl status argus-retina argus-mnemosyne argus-shield
-```
-
-## How It Works
-
-**3 components working together:**
-
-1. **Retina** 👁️ - Captures network packets
-   - Watches all traffic flowing through your network
-   - Extracts key patterns (packet sizes, timing, volume)
-   - Stores in local CSV files
-
-2. **Mnemosyne** 🧠 - AI Brain
-   - Learns what "normal" traffic looks like for YOUR network
-   - Uses Isolation Forest (AI algorithm) to spot anomalies
-   - Retrains weekly to stay current
-
-3. **Aegis** 🛡️ - Protection Engine
-   - Runs real-time detection (every 5 seconds)
-   - Compares live traffic against learned baseline
-   - Blocks malicious IPs automatically (after 7-day safety period)
-
-## Detailed Installation
-
-### Step 1: Prepare Hardware
-
-```bash
-# Flash Raspberry Pi OS Lite to microSD card
-# Use Raspberry Pi Imager (https://www.raspberrypi.com/software/)
-# Boot Pi with internet connection
-```
-
-### Step 2: Set Up Firebase
-
-```
-1. Go to https://console.firebase.google.com
-2. Create project "argus-v0"
-3. Create Realtime Database (Asia-Southeast1)
-4. Create Cloud Storage bucket
-5. Generate service account JSON key
-6. Keep JSON key safe (you'll need it during install)
-```
-
-### Step 3: Run Installer
-
-```bash
-# SSH into Pi
-ssh pi@[pi-ip]
-
-# Download and run installer
-curl -fsSL https://raw.githubusercontent.com/Ojas-bb/Argus_V/main/install.sh | bash
-
-# Follow interactive prompts:
-# - Paste Firebase service account JSON
-# - Select network interface (usually eth0)
-# - Confirm dry-run mode (mandatory for 7 days)
-```
-
-### Step 4: Verify Installation
-
-```bash
-# Check all services running
-systemctl status argus-retina argus-mnemosyne argus-shield
-
-# View logs
-tail -f /var/log/argus/retina.log
-tail -f /var/log/argus/mnemosyne.log
-tail -f /var/log/argus/aegis.log
-```
-
-## Configuration
-
-Edit `/etc/argus/config.yaml`:
-
-```yaml
-retina:
-  interface: eth0           # Network interface to monitor
-  window_size: 5           # Flow window (seconds)
-  
-mnemosyne:
-  contamination: 0.05      # % of traffic expected to be anomalies
-  retraining_day: "Sunday" # Weekly retraining
-  
-aegis:
-  dry_run_days: 7          # Days before actual blocking starts
-  enable_blocking: false   # Set to true after dry-run
-```
-
-## Features
-
-✅ **Offline-First** - No cloud, no data exfiltration  
-✅ **Privacy-First** - Data deleted after 24 hours  
-✅ **AI-Powered** - Learns your specific network  
-✅ **Automatic** - No manual configuration needed  
-✅ **Safe** - 7-day dry-run before blocking  
-✅ **Smart Updates** - Weekly model retraining  
-✅ **Zero Downtime** - Automatic updates without restarting  
-
-## Deployment Options
-
-### Option A: Inline (Recommended)
-
-```
-[Router] --ethernet--> [Pi Running ARGUS] --ethernet--> [NGO Network]
-```
-
-Pi acts as gateway, sees all traffic. Best detection accuracy.
-
-**Setup:**
-1. Connect Pi between router and network
-2. Configure router's default gateway to Pi
-3. Done!
-
-### Option B: Port Mirroring (Advanced)
-
-```
-[Managed Switch] --SPAN port to Pi--> [Pi Running ARGUS]
-```
-
-Requires managed switch with SPAN/mirroring capability.
-
-See NETWORKING.md for detailed diagrams.
-
-## Usage
-
-### Check Status
-
-```bash
-systemctl status argus-shield
-journalctl -u argus-shield -f
-```
-
-### View Blocked IPs
-
-```bash
-tail -20 /var/log/argus/aegis.log | grep "BLOCKED"
-```
-
-### Manual Retraining
-
-```bash
-systemctl start argus-mnemosyne-train
-```
-
-### Disable Blocking (Emergency)
-
-```bash
-systemctl stop argus-shield
-# Or edit config.yaml: enable_blocking: false
-```
-
-### Check Model Performance
-
-```bash
-cat /var/log/argus/mnemosyne.log | tail -30
-```
-
-## Troubleshooting
-
-### "Pi can't reach Firebase"
-
-```bash
-# Test connectivity
-ping 8.8.8.8
-curl https://www.google.com
-
-# Check Firebase credentials
-cat /opt/argus/firebase-config.json | head -3
-
-# Verify service account has Realtime DB access
-```
-
-### "Model fails to load"
-
-```bash
-# Check disk space
-df -h /opt/argus
-
-# Verify model file exists
-ls -lh /opt/argus/models/
-
-# Check permissions
-sudo chown -R argus:argus /opt/argus
-```
-
-### "No packets captured"
-
-```bash
-# Verify interface is correct
-ip link show
-
-# Check if interface is up
-sudo ip link set eth0 up
-
-# Test packet capture
-sudo tcpdump -i eth0 -c 10
-```
-
-### "False positives (high blocking rate)"
-
-```bash
-# You're still in dry-run mode - this is expected
-# After 7 days, model will be more accurate
-
-# Or: Adjust contamination in config.yaml
-mnemosyne:
-  contamination: 0.1  # Increase if too sensitive
-```
-
-## Security & Privacy
-
-🔒 **Data Retention:** 24 hours only (then deleted)  
-🔐 **Anonymization:** IP hashing, timestamp rounding  
-🔒 **Encryption:** TLS for all Firebase communication  
-🔐 **No Cloud:** 100% runs locally  
-🔒 **No Tracking:** No telemetry or analytics  
-🔐 **Code Access:** Tied to active contract (revoked on termination)  
-
-## Support
-
-📧 **Email:** karman.labs.contact@gmail.com  
-📖 **Docs:** See `/docs/` folder  
-🔍 **Logs:** `/var/log/argus/`  
-📋 **Debug:** See SUPPORT.md for log collection  
-
-## Roadmap
-
-| Version | Feature | Status |
-|---------|---------|--------|
-| v0 (Now) | Network threat detection | ✅ Done |
-| v1.5 | Device vulnerability scanning + auto-patching | 🔄 In Progress |
-| v2.0 | DPI (encrypted threat detection) | 📅 Q2 2025 |
-| v3.0+ | Threat intelligence API | 📅 Q3 2025+ |
-
-## License & Pricing
-
-**Free Tier (NGO Pilots)**
-- Full ARGUS detection
-- Data collection for model improvement (anonymized)
-- Email support
-
-**Paid Tier ($2-5k/year)**
-- Zero data collection (all local)
-- Daily model updates
-- Priority support
-
-**Enterprise**
-- Custom threat intelligence
-- On-call support
-- Dedicated account manager
-
-## Legal
-
-- Closed source (proprietary)
-- Source code access tied to active contract
-- Non-redistribution clause
-- See LICENSE file for full terms
-
-## Technology Stack
-
-- **Language:** Python 3.8+
-- **ML:** scikit-learn (Isolation Forest)
-- **Networking:** scapy, pcap
-- **Infrastructure:** Firebase, GitHub Actions
-- **OS:** Raspberry Pi OS (Debian-based)
-
-## Architecture
-
-```
-┌─────────────────────────────────────┐
-│     NGO Network Traffic             │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│  Retina: Packet Capture             │
-│  (5-second windows, 4 features)     │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│  Mnemosyne: AI Training (Weekly)    │
-│  (Learn normal baseline)             │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│  Aegis: Real-Time Detection         │
-│  (Compare → Score → Block)           │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│  Blocked Traffic (iptables DROP)    │
-└─────────────────────────────────────┘
-```
-
-## Contributing
-
-Not open source. Research partnerships: Contact us.
-
-## Credits
-
-Built by R0B0T (OJAS).
-
-Inspired by privacy-first design (Tor, Signal) and academic anomaly detection research.
+# 🛡️ Argus_V: AI-Powered Network Defense for NGOs
+
+**Privacy-first, offline-capable, and autonomous cybersecurity for organizations that need enterprise-grade protection on a bootstrap budget.**
+
+Argus_V is a specialized security stack designed specifically for NGOs operating in high-risk or low-bandwidth environments. It provides real-time threat detection and automated response without requiring cloud connectivity or expensive subscriptions.
+
+| Feature | Benefit |
+|---------|---------|
+| **Offline-First** | No data ever leaves your network. Perfect for sensitive operations. |
+| **AI-Powered** | Learns your network's unique "heartbeat" to spot sophisticated anomalies. |
+| **Zero-Cost Hardware** | Runs on a Raspberry Pi 4 (8GB) or equivalent hardware. |
+| **Automated Response** | Blocks threats in real-time using Aegis enforcement engine. |
+| **NGO-Focused** | Simplified deployment and maintenance for non-technical staff. |
 
 ---
 
-**Ready to protect your network? Start the 5-minute install above.** 🚀
+## 📋 Prerequisites
+
+### Hardware Requirements
+- **Raspberry Pi 4 Model B (8GB RAM recommended)** or equivalent ARM/x86_64 Debian-based system.
+- **MicroSD Card (32GB+):** High-endurance (Class 10/UHS-1) recommended.
+- **Power Supply:** Stable 5.1V 3A USB-C power.
+- **Network Interface:** Ethernet recommended for primary monitoring.
+
+### Network Requirements
+- **Positioning:** Must be placed where it can see network traffic (e.g., as a gateway or via a SPAN/Mirror port).
+- **Interface:** Network card must support promiscuous mode.
+
+### OS & Software
+- **OS:** Raspberry Pi OS Lite (64-bit) Bookworm/Bullseye, or Debian 11/12.
+- **Python:** 3.11 or higher (automatically handled by installer).
+- **Access:** Root/sudo privileges required for installation.
+
+---
+
+## 🚀 Quick Start (5 Minutes)
+
+Deploy Argus_V to your device with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ojas-bb/Argus_V/main/install.sh | sudo bash
+```
+
+### Verification Steps
+After installation, check that all services are active:
+
+```bash
+# Check service status
+sudo systemctl status argus-retina argus-mnemosyne argus-aegis
+
+# Check for active packet capture
+tail -f /var/log/argus_v/retina.log
+```
+
+**Success Indicator:** You should see "Capturing packets on [interface]" in the Retina logs.
+
+---
+
+## 🛠️ Detailed Installation
+
+### 1. Prepare Your Environment
+Ensure your system is up to date:
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 2. Firebase Integration (Optional)
+Argus_V can sync models and alerts to Firebase for remote monitoring.
+1. Create a project in the [Firebase Console](https://console.firebase.google.com/).
+2. Enable **Realtime Database** and **Cloud Storage**.
+3. Generate a **Service Account JSON key** (Project Settings -> Service Accounts).
+4. Have this JSON content ready during installation.
+
+### 3. Run the Installer
+The interactive installer will guide you through:
+- Network interface selection (e.g., `eth0`).
+- Firebase credential input.
+- Component activation (Retina, Mnemosyne, Aegis).
+
+```bash
+sudo ./install.sh
+```
+
+### 4. Service Management
+All components run as systemd services:
+- **Start All:** `sudo systemctl start argus-retina argus-aegis`
+- **Stop All:** `sudo systemctl stop argus-retina argus-aegis`
+- **View Combined Logs:** `sudo journalctl -u argus-* -f`
+
+---
+
+## 🏗️ Architecture Overview
+
+Argus_V consists of three core modules that work in harmony:
+
+1. **Retina (The Eyes) 👁️**
+   - **Function:** High-performance packet capture and telemetry generation.
+   - **Security:** Runs as a non-root `argus` user utilizing `AmbientCapabilities` (`CAP_NET_RAW`, `CAP_NET_ADMIN`).
+   - **Output:** Aggregates raw traffic into anonymized flow features.
+
+2. **Mnemosyne (The Memory) 🧠**
+   - **Function:** AI training pipeline.
+   - **Workflow:** Processes Retina data weekly (via cron) to update the network's behavioral baseline.
+   - **Method:** Uses Isolation Forest algorithms to define "normal" vs. "anomalous".
+
+3. **Aegis (The Shield) 🛡️**
+   - **Function:** Real-time threat enforcement.
+   - **Workflow:** Compares live Retina telemetry against Mnemosyne models.
+   - **Enforcement:** Automatically drops malicious traffic via `iptables`.
+
+---
+
+## ⚙️ Configuration
+
+Configuration files are located in `/etc/argus_v/`.
+
+| File | Purpose |
+|------|---------|
+| `retina.yaml` | Packet capture settings, interface selection, and IP salt. |
+| `mnemosyne.yaml` | Training schedules, contamination levels, and model parameters. |
+| `aegis.yaml` | Enforcement rules, dry-run duration, and threshold settings. |
+
+### Security & Permissions
+- All configuration files are protected with **mode 600** (Read/Write for root only).
+- Sensitive credentials (Firebase, IP salts) are never stored in plain text in world-readable locations.
+
+---
+
+## 🔒 Security Features
+
+- **Least Privilege:** Services run as a dedicated `argus` user where possible.
+- **AmbientCapabilities:** Retina captures raw packets without requiring full root shell access.
+- **IP Anonymization:** Uses HMAC-SHA256 salted hashing for all internal IP tracking to protect user privacy.
+- **Safety Period:** Aegis defaults to a **7-day dry-run mode**. During this time, it logs anomalies but does *not* block traffic, allowing you to tune the model and prevent false positives.
+
+---
+
+## ❓ Troubleshooting
+
+### Service won't start
+- **Check logs:** `sudo journalctl -u argus-retina -e`
+- **Common Cause:** Another process (like `tcpdump`) is locking the interface.
+- **Common Cause:** Invalid YAML syntax in `/etc/argus_v/`.
+
+### No packets captured
+- **Verify interface:** Run `ip link` to ensure the interface is `UP`.
+- **Scapy Warning:** If you see `WARNING: No libpcap provider found`, ensure `libpcap-dev` is installed: `sudo apt install libpcap-dev`.
+
+### Permission denied errors
+- Ensure you are running commands with `sudo` where required.
+- Check directory ownership: `sudo chown -R argus:argus /var/lib/argus_v`.
+
+### Configuration errors
+- Validate your config: `/opt/argus_v/venv/bin/python -m argus_v.retina.cli --config /etc/argus_v/retina.yaml validate`
+
+---
+
+## 🗑️ Uninstallation
+
+To cleanly remove Argus_V:
+
+```bash
+sudo ./uninstall.sh
+```
+
+**Options:**
+- `--purge`: Removes all configuration and historical data/logs.
+- By default, uninstallation preserves your `/etc/argus_v` configurations and `/var/lib/argus_v` data.
+
+---
+
+## 🗺️ What's Next / v1 Roadmap
+
+- **Model Zoo:** Pre-trained models for common NGO hardware (IoT cameras, VoIP phones).
+- **Multi-Site Dashboard:** Aggregated view for HQ to monitor multiple field offices.
+- **Local Web UI:** Light-weight local dashboard for real-time traffic visualization.
+- **DPI Integration:** Optional Deep Packet Inspection for non-encrypted traffic analysis.
+
+---
+
+**Built with ❤️ for the NGO community. Stay safe out there.**
