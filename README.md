@@ -35,10 +35,12 @@ Argus_V is a specialized security stack designed specifically for NGOs operating
 
 ## 🚀 Quick Start (5 Minutes)
 
-Deploy Argus_V to your device with a single command:
+Deploy Argus_V to your device:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ojas-bb/Argus_V/main/install.sh | sudo bash
+git clone https://github.com/Ojas-bb/Argus_V.git
+cd Argus_V
+sudo ./install.sh
 ```
 
 ### Verification Steps
@@ -64,14 +66,21 @@ Ensure your system is up to date:
 sudo apt update && sudo apt upgrade -y
 ```
 
-### 2. Firebase Integration (Optional)
+### 2. Clone the Repository
+Download the Argus_V source code:
+```bash
+git clone https://github.com/Ojas-bb/Argus_V.git
+cd Argus_V
+```
+
+### 3. Firebase Integration (Optional)
 Argus_V can sync models and alerts to Firebase for remote monitoring.
 1. Create a project in the [Firebase Console](https://console.firebase.google.com/).
 2. Enable **Realtime Database** and **Cloud Storage**.
 3. Generate a **Service Account JSON key** (Project Settings -> Service Accounts).
 4. Have this JSON content ready during installation.
 
-### 3. Run the Installer
+### 4. Run the Installer
 The interactive installer will guide you through:
 - Network interface selection (e.g., `eth0`).
 - Firebase credential input.
@@ -81,7 +90,7 @@ The interactive installer will guide you through:
 sudo ./install.sh
 ```
 
-### 4. Service Management
+### 5. Service Management
 All components run as systemd services:
 - **Start All:** `sudo systemctl start argus-retina argus-aegis`
 - **Stop All:** `sudo systemctl stop argus-retina argus-aegis`
