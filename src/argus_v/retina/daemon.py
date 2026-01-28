@@ -179,6 +179,7 @@ class RetinaDaemon:
         self._aggregator = WindowAggregator(
             window_seconds=self.config.aggregation.window_seconds,
             anonymization_salt=self.config.anonymization.ip_salt,
+            flow_timeout_seconds=300,  # Add a default flow timeout
         )
         
         # Initialize packet batcher for performance
