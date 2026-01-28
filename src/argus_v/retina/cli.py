@@ -130,7 +130,7 @@ def load_retina_config(config_path: str, overrides: dict = None) -> RetinaConfig
         
         # Apply overrides if provided
         if overrides:
-            if "interface" in overrides:
+            if overrides.get("interface") is not None:
                 # Update capture interface
                 current_capture = retina_config.capture
                 new_capture = current_capture.__class__(
