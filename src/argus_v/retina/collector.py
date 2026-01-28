@@ -163,7 +163,7 @@ class CaptureEngine:
                 logger.error(f"Scapy capture error: {e}")
         
         self._stop_event.clear()
-        self._capture_thread = Thread(target=capture_worker, daemon=True)
+        self._capture_thread = Thread(target=capture_worker)
         self._capture_thread.start()
     
     def _start_pcapy_capture(
