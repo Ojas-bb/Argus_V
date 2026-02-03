@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import time
 from contextlib import contextmanager
@@ -310,8 +311,16 @@ class CaptureEngine:
                             protocol = "UDP"
             elif eth_type == 0x86DD:  # IPv6
                 if len(packet) >= 54:  # Ethernet + IPv6 header
-                    src_ip = ":".join(f"{packet[i]:02x}{packet[i+1]:02x}" for i in range(22, 38, 2))
-                    dst_ip = ":".join(f"{packet[i]:02x}{packet[i+1]:02x}" for i in range(38, 54, 2))
+                    try:
+                        src_bytes = packet[22:38]
+                        dst_bytes = packet[38:54]
+                        src_ip = str(ipaddress.IPv6Address(src_bytes))
+                        dst_ip = str(ipaddress.IPv6Address(dst_bytes))
+                    except ValueError:
+                        # Fallback for invalid IP bytes
+                        src_ip = ":".join(f"{packet[i]:02x}{packet[i+1]:02x}" for i in range(22, 38, 2))
+                        dst_ip = ":".join(f"{packet[i]:02x}{packet[i+1]:02x}" for i in range(38, 54, 2))
+
                     protocol = "IPv6"
             
             return PacketInfo(

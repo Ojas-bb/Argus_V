@@ -45,7 +45,8 @@ class PredictionEngine:
     
     def __init__(
         self, 
-        config,
+        polling_config,
+        prediction_config,
         model_manager: ModelManager,
         blacklist_manager: BlacklistManager,
         anonymizer=None
@@ -53,12 +54,14 @@ class PredictionEngine:
         """Initialize prediction engine.
         
         Args:
-            config: Prediction configuration
+            polling_config: Polling configuration
+            prediction_config: Prediction configuration
             model_manager: Model manager instance
             blacklist_manager: Blacklist manager instance
             anonymizer: Optional anonymizer for sensitive data
         """
-        self.config = config
+        self.polling_config = polling_config
+        self.prediction_config = prediction_config
         self.model_manager = model_manager
         self.blacklist_manager = blacklist_manager
         self.anonymizer = anonymizer
@@ -93,8 +96,8 @@ class PredictionEngine:
             logger,
             "prediction_engine_initialized",
             level="info",
-            poll_interval=self.config.poll_interval_seconds,
-            batch_size=self.config.batch_size
+            poll_interval=self.polling_config.poll_interval_seconds,
+            batch_size=self.polling_config.batch_size
         )
     
     def start(self) -> bool:
@@ -215,7 +218,7 @@ class PredictionEngine:
     def _poll_csv_files(self) -> None:
         """Background thread that polls for new CSV files from Retina."""
         consecutive_errors = 0
-        max_consecutive_errors = self.config.max_poll_errors
+        max_consecutive_errors = self.polling_config.max_poll_errors
         
         while self._running:
             try:
@@ -260,14 +263,14 @@ class PredictionEngine:
                         level="critical",
                         errors=consecutive_errors
                     )
-                    time.sleep(self.config.poll_retry_delay)
+                    time.sleep(self.polling_config.poll_retry_delay)
                     consecutive_errors = 0
                 else:
                     time.sleep(5)  # Brief pause before retry
             
             # Sleep for polling interval
             if self._running:
-                time.sleep(self.config.poll_interval_seconds)
+                time.sleep(self.polling_config.poll_interval_seconds)
     
     def _find_new_csv_files(self) -> List[Path]:
         """Find new CSV files in Retina output directory.
@@ -276,7 +279,7 @@ class PredictionEngine:
             List of new CSV file paths
         """
         try:
-            csv_dir = Path(self.config.csv_directory)
+            csv_dir = Path(self.polling_config.csv_directory)
             
             if not csv_dir.exists():
                 log_event(
@@ -299,7 +302,7 @@ class PredictionEngine:
             # Sort by modification time (newest first)
             new_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
             
-            return new_files[:self.config.batch_size]  # Limit batch size
+            return new_files[:self.polling_config.batch_size]  # Limit batch size
             
         except Exception as e:
             log_event(
@@ -389,7 +392,7 @@ class PredictionEngine:
                     return False
             
             # Process flows in batches
-            batch_size = min(self.config.max_flows_per_batch, len(flows_df))
+            batch_size = min(self.prediction_config.max_flows_per_batch, len(flows_df))
             
             for i in range(0, len(flows_df), batch_size):
                 if not self._running:  # Check if still running
@@ -427,7 +430,7 @@ class PredictionEngine:
                     continue
             
             # Mark file as processed
-            processed_file_path = csv_file.parent / f"{csv_file.name}{self.config.processed_file_suffix}"
+            processed_file_path = csv_file.parent / f"{csv_file.name}{self.polling_config.processed_file_suffix}"
             processed_file_path.touch()
             
             # Update processing time statistics
@@ -624,8 +627,15 @@ class PredictionEngine:
 
             # Add anonymized IP columns if anonymizer available
             if self.anonymizer:
-                df["src_ip_hash"] = df["src_ip"].apply(self.anonymizer.anonymize_ip)
-                df["dst_ip_hash"] = df["dst_ip"].apply(self.anonymizer.anonymize_ip)
+                def safe_anonymize(ip):
+                    try:
+                        return self.anonymizer.anonymize_ip(ip)
+                    except ValueError:
+                        # Assume already anonymized or invalid, return as is
+                        return ip
+
+                df["src_ip_hash"] = df["src_ip"].apply(safe_anonymize)
+                df["dst_ip_hash"] = df["dst_ip"].apply(safe_anonymize)
 
             cleaned_rows = int(len(df))
             log_event(
