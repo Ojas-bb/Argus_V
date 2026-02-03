@@ -375,8 +375,8 @@ class PacketBatcher:
         self._batch_timer = threading.Timer(
             self.batch_timeout_ms / 1000.0,
             self._flush_batch,
-            daemon=True,
         )
+        self._batch_timer.daemon = True
         self._batch_timer.start()
     
     def _flush_batch(self) -> None:

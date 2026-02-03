@@ -99,8 +99,7 @@ class AegisDaemon:
         
         # Configure logging with structured output
         configure_logging(
-            level=log_level,
-            format_string="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            level=log_level
         )
     
     def _initialize_components(self) -> None:
@@ -249,7 +248,8 @@ class AegisDaemon:
             
             # Initialize prediction engine
             prediction_engine = PredictionEngine(
-                config=self.config.polling,
+                polling_config=self.config.polling,
+                prediction_config=self.config.prediction,
                 model_manager=model_manager,
                 blacklist_manager=blacklist_manager,
                 anonymizer=anonymizer

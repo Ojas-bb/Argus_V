@@ -236,7 +236,7 @@ class TestPacketConversion:
             0x86, 0xdd,                        # EtherType: IPv6
             # IPv6 header (40 bytes)
             0x60,                              # Version: 6, Traffic class
-            0x00, 0x00, 0x00, 0x00,           # Flow label
+            0x00, 0x00, 0x00,                 # Flow label
             0x00, 0x2a,                       # Payload length: 42 bytes
             0x06,                              # Next header: TCP
             0x40,                              # Hop limit: 64
@@ -281,6 +281,6 @@ class TestInterfaceAvailability:
         engine = CaptureEngine(interface="eth0")
         
         # Mock an exception during interface check
-        with patch.object(engine, 'is_interface_available', side_effect=Exception("Mock error")):
+        with patch('argus_v.retina.collector.get_if_list', side_effect=Exception("Mock error")):
             # Should not raise exception, should return False
             assert engine.is_interface_available() is False

@@ -353,6 +353,10 @@ class TestPredictionEngine:
             max_poll_errors=3
         )
         
+        self.prediction_config = PredictionConfig(
+            max_flows_per_batch=100
+        )
+
         self.anonymizer = HashAnonymizer(salt="test-engine")
         
         # Create mock managers
@@ -374,7 +378,8 @@ class TestPredictionEngine:
         self.mock_blacklist_manager.add_to_blacklist.return_value = True
         
         self.prediction_engine = PredictionEngine(
-            config=self.polling_config,
+            polling_config=self.polling_config,
+            prediction_config=self.prediction_config,
             model_manager=self.mock_model_manager,
             blacklist_manager=self.mock_blacklist_manager,
             anonymizer=self.anonymizer
@@ -393,7 +398,8 @@ class TestPredictionEngine:
     
     def test_prediction_engine_initialization(self):
         """Test prediction engine initialization."""
-        assert self.prediction_engine.config == self.polling_config
+        assert self.prediction_engine.polling_config == self.polling_config
+        assert self.prediction_engine.prediction_config == self.prediction_config
         assert self.prediction_engine.model_manager == self.mock_model_manager
         assert self.prediction_engine.blacklist_manager == self.mock_blacklist_manager
         assert not self.prediction_engine._running
@@ -630,6 +636,10 @@ class TestPredictionFlow:
             poll_interval_seconds=1
         )
         
+        self.prediction_config = PredictionConfig(
+            max_flows_per_batch=100
+        )
+
         self.enforcement_config = EnforcementConfig(
             dry_run_duration_days=7,
             emergency_stop_file=str(self.temp_dir / "emergency.stop")
@@ -646,7 +656,8 @@ class TestPredictionFlow:
         
         # Create prediction engine
         self.prediction_engine = PredictionEngine(
-            config=self.polling_config,
+            polling_config=self.polling_config,
+            prediction_config=self.prediction_config,
             model_manager=self.model_manager,
             blacklist_manager=self.blacklist_manager,
             anonymizer=self.anonymizer
