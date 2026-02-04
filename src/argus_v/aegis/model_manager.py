@@ -571,9 +571,17 @@ class ModelManager:
     def _use_fallback_model(self) -> bool:
         """Use fallback model when main model loading fails.
         
+        Prioritizes:
+        1. Foundation Model (Shipped with appliance)
+        2. Random Noise Model (Last resort)
+
         Returns:
             True if fallback model loaded successfully, False otherwise
         """
+        # Try loading foundation model first
+        if self._load_foundation_model():
+            return True
+
         try:
             if not self.config.use_fallback_model:
                 log_event(
@@ -626,6 +634,65 @@ class ModelManager:
             log_event(
                 logger,
                 "fallback_model_load_failed",
+                level="error",
+                error=str(e)
+            )
+            return False
+
+    def _load_foundation_model(self) -> bool:
+        """Load the shipped Foundation Model.
+
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        try:
+            model_path = Path(self.config.foundation_model_path)
+            scaler_path = Path(self.config.foundation_scaler_path)
+
+            if not (model_path.exists() and scaler_path.exists()):
+                log_event(
+                    logger,
+                    "foundation_model_not_found",
+                    level="debug",
+                    model_path=str(model_path),
+                    scaler_path=str(scaler_path)
+                )
+                return False
+
+            # Load model
+            with open(model_path, 'rb') as f:
+                self._model = pickle.load(f)
+
+            # Validate model
+            if not self._validate_model():
+                raise ModelValidationError("Foundation model validation failed")
+
+            # Load scaler
+            with open(scaler_path, 'rb') as f:
+                self._scaler = pickle.load(f)
+
+            # Validate scaler
+            if not self._validate_scaler():
+                raise ScalerValidationError("Foundation scaler validation failed")
+
+            self._model_metadata = {
+                'name': 'Foundation Model',
+                'timestamp': '00000000_000000', # Epoch
+                'type': 'foundation'
+            }
+
+            log_event(
+                logger,
+                "foundation_model_loaded",
+                level="info"
+            )
+
+            return True
+
+        except Exception as e:
+            log_event(
+                logger,
+                "foundation_model_load_failed",
                 level="error",
                 error=str(e)
             )

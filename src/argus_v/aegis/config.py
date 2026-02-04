@@ -46,6 +46,10 @@ class ModelConfig:
     use_fallback_model: bool = True
     fallback_prediction_threshold: float = 0.7
     
+    # Foundation Model
+    foundation_model_path: str = "/var/lib/argus/foundation/model.pkl"
+    foundation_scaler_path: str = "/var/lib/argus/foundation/scaler.pkl"
+
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "ModelConfig":
         """Create ModelConfig from configuration mapping."""
@@ -94,6 +98,16 @@ class ModelConfig:
                     "must be between 0.0 and 1.0"
                 )
             ])
+
+        foundation_model_path = require_non_empty_str(
+            get_optional(data, "foundation_model_path", "/var/lib/argus/foundation/model.pkl"),
+            path=f"{path}.foundation_model_path"
+        )
+
+        foundation_scaler_path = require_non_empty_str(
+            get_optional(data, "foundation_scaler_path", "/var/lib/argus/foundation/scaler.pkl"),
+            path=f"{path}.foundation_scaler_path"
+        )
         
         return ModelConfig(
             model_local_path=model_local_path,
@@ -103,7 +117,9 @@ class ModelConfig:
             min_model_age_hours=min_model_age_hours,
             max_model_age_days=max_model_age_days,
             use_fallback_model=use_fallback_model,
-            fallback_prediction_threshold=fallback_prediction_threshold
+            fallback_prediction_threshold=fallback_prediction_threshold,
+            foundation_model_path=foundation_model_path,
+            foundation_scaler_path=foundation_scaler_path
         )
 
 
@@ -383,6 +399,7 @@ class AegisConfig:
                 "min_model_age_hours": self.model.min_model_age_hours,
                 "max_model_age_days": self.model.max_model_age_days,
                 "use_fallback_model": self.model.use_fallback_model,
+                "foundation_model_path": self.model.foundation_model_path,
             },
             "polling": {
                 "poll_interval_seconds": self.polling.poll_interval_seconds,
