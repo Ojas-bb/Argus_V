@@ -17,7 +17,7 @@ from ..oracle_core.logging import log_event
 logger = logging.getLogger(__name__)
 
 class FeedbackManager:
-    """Manages user feedback and retraining triggers."""
+    """Manages user feedback and retraining triggers for Active Learning."""
 
     def __init__(self, config):
         """Initialize feedback manager.

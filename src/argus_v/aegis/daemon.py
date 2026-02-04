@@ -247,7 +247,7 @@ class AegisDaemon:
             )
             self._components['blacklist_manager'] = blacklist_manager
             
-            # Initialize feedback manager
+            # Initialize feedback manager (Active Learning)
             feedback_manager = FeedbackManager(self.config)
             self._components['feedback_manager'] = feedback_manager
 

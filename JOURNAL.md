@@ -60,7 +60,7 @@ This architectural change transforms Argus_V from a "project" to a "product". Us
 ---
 
 ## 02. Dev Log: Explainable AI (XAI) for Opaque Inference
-**Date:** October 26, 2023
+**Date:** February 04, 2026
 **Feature:** Explainable Inference (XAI) Engine
 
 ### Problem
@@ -91,7 +91,7 @@ This is a classic engineering trade-off: Accuracy vs. Latency. While SHAP is mor
 ---
 
 ## 03. Dev Log: Active Learning Feedback Loop
-**Date:** October 26, 2023
+**Date:** February 04, 2026
 **Feature:** Active Learning (Human-in-the-Loop)
 
 ### Problem
