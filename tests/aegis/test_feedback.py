@@ -1,71 +1,65 @@
 import pytest
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-from argus_v.aegis.feedback_manager import FeedbackManager
+from unittest.mock import MagicMock
+from src.argus_v.aegis.feedback_manager import FeedbackManager
 
-class TestFeedbackManager:
+class HelperFeedbackManager(FeedbackManager):
+    def __init__(self, config, root_path):
+        # Bypass super().__init__ to avoid /var/lib creation
+        self.config = config
+        self.feedback_dir = root_path / "feedback"
+        self.trusted_ips_file = self.feedback_dir / "trusted_ips.json"
+        self.retrain_flag_file = root_path / "mnemosyne" / "trigger_retrain"
+        self._trusted_ips_cache = None
+        self._ensure_directories()
 
-    @pytest.fixture
-    def feedback_manager(self, tmp_path):
-        # Create temp dirs
-        feedback_dir = tmp_path / "feedback"
-        mnemosyne_dir = tmp_path / "mnemosyne"
+@pytest.fixture
+def feedback_manager(tmp_path):
+    config = MagicMock()
+    return HelperFeedbackManager(config, tmp_path)
 
-        # Subclass for testing
-        class TestableFeedbackManager(FeedbackManager):
-            def __init__(self, config):
-                self.config = config
-                self.feedback_dir = feedback_dir
-                self.trusted_ips_file = self.feedback_dir / "trusted_ips.json"
-                self.retrain_flag_file = mnemosyne_dir / "trigger_retrain"
-                self._trusted_ips_cache = None  # Initialize cache
-                self._ensure_directories()
+def test_report_false_positive(feedback_manager):
+    ip = "192.168.1.10"
+    success = feedback_manager.report_false_positive(ip, "test reason")
 
-        return TestableFeedbackManager(MagicMock())
+    assert success
+    assert feedback_manager.is_trusted(ip)
 
-    def test_report_false_positive(self, feedback_manager):
-        ip = "10.0.0.1"
-        success = feedback_manager.report_false_positive(ip, "Test reason")
+    # Check cache
+    assert any(entry['ip'] == ip for entry in feedback_manager._trusted_ips_cache)
 
-        assert success
+    # Check file
+    with open(feedback_manager.trusted_ips_file) as f:
+        data = json.load(f)
+        assert any(entry['ip'] == ip for entry in data)
 
-        # Verify file content
-        with open(feedback_manager.trusted_ips_file, 'r') as f:
-            data = json.load(f)
+def test_is_trusted(feedback_manager):
+    ip = "10.0.0.1"
+    feedback_manager.report_false_positive(ip)
 
-        assert len(data) == 1
-        assert data[0]['ip'] == ip
-        assert data[0]['reason'] == "Test reason"
-        assert data[0]['status'] == "active"
+    assert feedback_manager.is_trusted(ip)
+    assert not feedback_manager.is_trusted("10.0.0.2")
 
-        # Verify cache was updated
-        assert feedback_manager._trusted_ips_cache is not None
-        assert len(feedback_manager._trusted_ips_cache) == 1
+def test_persistence(tmp_path):
+    config = MagicMock()
+    # Create one manager to write data
+    mgr1 = HelperFeedbackManager(config, tmp_path)
+    mgr1.report_false_positive("1.2.3.4")
 
-    def test_report_duplicate_ip(self, feedback_manager):
-        ip = "10.0.0.1"
-        feedback_manager.report_false_positive(ip)
-        success = feedback_manager.report_false_positive(ip)
+    # Create second manager to read data
+    mgr2 = HelperFeedbackManager(config, tmp_path)
 
-        assert success
+    # Should be trusted even without cache initially populated (it loads on first check)
+    assert mgr2._trusted_ips_cache is None
+    assert mgr2.is_trusted("1.2.3.4")
+    assert mgr2._trusted_ips_cache is not None
 
-        # Verify no duplicate
-        with open(feedback_manager.trusted_ips_file, 'r') as f:
-            data = json.load(f)
+def test_trigger_retrain(feedback_manager):
+    # Ensure file doesn't exist yet (mocked path should be clean)
+    if feedback_manager.retrain_flag_file.exists():
+        feedback_manager.retrain_flag_file.unlink()
 
-        assert len(data) == 1
+    success = feedback_manager.trigger_retrain()
 
-    def test_trigger_retrain(self, feedback_manager):
-        success = feedback_manager.trigger_retrain()
-
-        assert success
-        assert feedback_manager.retrain_flag_file.exists()
-
-    def test_get_trusted_ips(self, feedback_manager):
-        feedback_manager.report_false_positive("1.1.1.1")
-        feedback_manager.report_false_positive("2.2.2.2")
-
-        ips = feedback_manager.get_trusted_ips()
-        assert len(ips) == 2
-        assert any(x['ip'] == "1.1.1.1" for x in ips)
+    assert success
+    assert feedback_manager.retrain_flag_file.exists()

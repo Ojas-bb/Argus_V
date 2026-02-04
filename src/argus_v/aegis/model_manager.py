@@ -852,7 +852,7 @@ class ModelManager:
         return info
 
     def explain_anomaly(self, flow_features: pd.Series, top_k: int = 3) -> List[str]:
-        """Explain why a flow was flagged as anomalous.
+        """Explain why a flow was flagged as anomalous using Z-score heuristics.
 
         Uses a heuristic approach by calculating Z-scores for each feature based on
         the scaler's mean and scale. Features with the largest absolute Z-scores

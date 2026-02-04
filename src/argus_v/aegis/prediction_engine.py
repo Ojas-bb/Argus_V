@@ -691,6 +691,7 @@ class PredictionEngine:
                         is_trusted = True
 
                 if is_trusted:
+                    # Trusted IP (Active Learning Feedback) - suppress alert
                     log_event(
                         logger,
                         "anomaly_suppressed_trusted_ip",

@@ -324,10 +324,10 @@ Examples:
             help='Source of entry to remove'
         )
 
-        # Feedback command
+        # Feedback command (Active Learning)
         feedback_parser = subparsers.add_parser(
             'feedback',
-            help='Provide feedback on model predictions'
+            help='Provide feedback on model predictions and trigger retraining'
         )
         feedback_parser.add_argument(
             '--false-positive',
