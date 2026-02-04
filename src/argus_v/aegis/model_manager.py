@@ -850,3 +850,67 @@ class ModelManager:
             info['model_metadata'] = self._model_metadata
         
         return info
+
+    def explain_anomaly(self, flow_features: pd.Series, top_k: int = 3) -> List[str]:
+        """Explain why a flow was flagged as anomalous.
+
+        Uses a heuristic approach by calculating Z-scores for each feature based on
+        the scaler's mean and scale. Features with the largest absolute Z-scores
+        are considered the primary contributors to the anomaly.
+
+        Args:
+            flow_features: Series containing the feature values for the anomalous flow.
+            top_k: Number of top contributing features to return.
+
+        Returns:
+            List of human-readable explanation strings (e.g. "bytes_out (+4.2s)").
+        """
+        if not self._scaler or not hasattr(self._scaler, 'mean_') or not hasattr(self._scaler, 'scale_'):
+            return ["Explanation unavailable (no scaler stats)"]
+
+        try:
+            # Ensure input is numeric
+            features = pd.to_numeric(flow_features, errors='coerce').fillna(0)
+
+            # Reindex to match scaler features if needed
+            # (Assuming flow_features comes from the same source as predict_flows input)
+
+            # Calculate Z-scores: (x - mean) / scale
+            # Note: We need to handle potential shape mismatches if features are passed differently
+            # The scaler expects features in the order of self.feature_columns
+
+            z_scores = {}
+            for i, col in enumerate(self.feature_columns):
+                if col in features.index:
+                    val = features[col]
+                    mean = self._scaler.mean_[i]
+                    scale = self._scaler.scale_[i]
+
+                    if scale == 0:
+                        z_score = 0
+                    else:
+                        z_score = (val - mean) / scale
+
+                    z_scores[col] = z_score
+
+            # Sort by absolute Z-score (descending)
+            sorted_features = sorted(z_scores.items(), key=lambda item: abs(item[1]), reverse=True)
+
+            explanations = []
+            for col, z in sorted_features[:top_k]:
+                # Only report if significantly deviating (e.g. > 2 sigma)
+                # But for the top contributor, we might want to show it regardless?
+                # Let's show the top_k regardless, but formatted nicely.
+                sign = "+" if z >= 0 else ""
+                explanations.append(f"{col} ({sign}{z:.1f}σ)")
+
+            return explanations
+
+        except Exception as e:
+            log_event(
+                logger,
+                "anomaly_explanation_failed",
+                level="warning",
+                error=str(e)
+            )
+            return ["Explanation calculation failed"]

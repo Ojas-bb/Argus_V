@@ -323,6 +323,24 @@ Examples:
             default='manual',
             help='Source of entry to remove'
         )
+
+        # Feedback command
+        feedback_parser = subparsers.add_parser(
+            'feedback',
+            help='Provide feedback on model predictions'
+        )
+        feedback_parser.add_argument(
+            '--false-positive',
+            type=str,
+            metavar='IP',
+            help='Report an IP as a false positive (trusted)'
+        )
+        feedback_parser.add_argument(
+            '--reason',
+            type=str,
+            default='User reported false positive',
+            help='Reason for feedback'
+        )
         
         return parser
     
@@ -362,6 +380,8 @@ Examples:
                 return self._cmd_model(args)
             elif args.command == 'blacklist':
                 return self._cmd_blacklist(args)
+            elif args.command == 'feedback':
+                return self._cmd_feedback(args)
             else:
                 print(f"Unknown command: {args.command}")
                 return 1
@@ -909,6 +929,66 @@ Examples:
             
         except Exception as e:
             print(f"Blacklist command failed: {e}")
+            return 1
+
+    def _cmd_feedback(self, args) -> int:
+        """Handle feedback command.
+
+        Args:
+            args: Command arguments
+
+        Returns:
+            Exit code
+        """
+        if not args.false_positive:
+            print("Error: --false-positive <IP> is required")
+            return 1
+
+        try:
+            daemon = self._load_daemon(args.config)
+
+            if daemon._components.get('feedback_manager'):
+                feedback_manager = daemon._components['feedback_manager']
+
+                # 1. Report false positive (add to trusted list)
+                success = feedback_manager.report_false_positive(
+                    ip_address=args.false_positive,
+                    reason=args.reason
+                )
+
+                if success:
+                    print(f"✓ Reported {args.false_positive} as false positive (trusted)")
+
+                    # 2. Remove from blacklist if present
+                    if daemon._components.get('blacklist_manager'):
+                        blacklist_manager = daemon._components['blacklist_manager']
+                        if blacklist_manager.is_blacklisted(args.false_positive):
+                            rm_success = blacklist_manager.remove_from_blacklist(
+                                args.false_positive,
+                                source="feedback_correction"
+                            )
+                            if rm_success:
+                                print(f"✓ Removed {args.false_positive} from blacklist")
+                            else:
+                                print(f"⚠ Could not remove {args.false_positive} from blacklist")
+
+                    # 3. Trigger incremental retrain
+                    trigger_success = feedback_manager.trigger_retrain()
+                    if trigger_success:
+                        print("✓ Triggered incremental model retraining")
+                    else:
+                        print("✗ Failed to trigger retraining")
+
+                    return 0
+                else:
+                    print("✗ Failed to report false positive")
+                    return 1
+            else:
+                print("✗ Feedback manager not initialized")
+                return 1
+
+        except Exception as e:
+            print(f"Feedback command failed: {e}")
             return 1
     
     def _is_process_running(self, pid_file: str) -> bool:
