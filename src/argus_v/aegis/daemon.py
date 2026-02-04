@@ -23,6 +23,7 @@ from .config import AegisConfig, load_aegis_config
 from .model_manager import ModelManager
 from .blacklist_manager import BlacklistManager
 from .prediction_engine import PredictionEngine
+from .feedback_manager import FeedbackManager
 
 
 logger = logging.getLogger(__name__)
@@ -246,13 +247,18 @@ class AegisDaemon:
             )
             self._components['blacklist_manager'] = blacklist_manager
             
+            # Initialize feedback manager
+            feedback_manager = FeedbackManager(self.config)
+            self._components['feedback_manager'] = feedback_manager
+
             # Initialize prediction engine
             prediction_engine = PredictionEngine(
                 polling_config=self.config.polling,
                 prediction_config=self.config.prediction,
                 model_manager=model_manager,
                 blacklist_manager=blacklist_manager,
-                anonymizer=anonymizer
+                anonymizer=anonymizer,
+                feedback_manager=feedback_manager
             )
             self._components['prediction_engine'] = prediction_engine
             

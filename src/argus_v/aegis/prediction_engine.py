@@ -49,7 +49,8 @@ class PredictionEngine:
         prediction_config,
         model_manager: ModelManager,
         blacklist_manager: BlacklistManager,
-        anonymizer=None
+        anonymizer=None,
+        feedback_manager=None
     ):
         """Initialize prediction engine.
         
@@ -59,12 +60,14 @@ class PredictionEngine:
             model_manager: Model manager instance
             blacklist_manager: Blacklist manager instance
             anonymizer: Optional anonymizer for sensitive data
+            feedback_manager: Optional feedback manager for trusted IPs
         """
         self.polling_config = polling_config
         self.prediction_config = prediction_config
         self.model_manager = model_manager
         self.blacklist_manager = blacklist_manager
         self.anonymizer = anonymizer
+        self.feedback_manager = feedback_manager
         
         # State tracking
         self._running = False
@@ -676,13 +679,39 @@ class PredictionEngine:
                 anomaly_score = row.get('anomaly_score', 0)
                 risk_level = row.get('risk_level', 'low')
                 
+                # Check for trusted IPs (Immediate Relief)
+                src_ip = row.get('src_ip', '')
+                dst_ip = row.get('dst_ip', '')
+
+                is_trusted = False
+                if self.feedback_manager:
+                    if src_ip and self.feedback_manager.is_trusted(src_ip):
+                        is_trusted = True
+                    elif dst_ip and self.feedback_manager.is_trusted(dst_ip):
+                        is_trusted = True
+
+                if is_trusted:
+                    log_event(
+                        logger,
+                        "anomaly_suppressed_trusted_ip",
+                        level="debug",
+                        src_ip=src_ip,
+                        dst_ip=dst_ip
+                    )
+                    continue
+
                 if prediction == -1:  # Anomaly detected
                     action_needed = True
-                    action_reason = f"Anomaly detected (score: {anomaly_score:.3f})"
+
+                    # Generate explanation for the anomaly
+                    explanation = self.model_manager.explain_anomaly(row)
+                    explanation_str = ", ".join(explanation)
+
+                    action_reason = f"Anomaly detected: {explanation_str} (score: {anomaly_score:.3f})"
                     
                     if risk_level in ['high', 'critical']:
                         action_needed = True
-                        action_reason = f"High-risk anomaly detected (score: {anomaly_score:.3f}, risk: {risk_level})"
+                        action_reason = f"High-risk anomaly: {explanation_str} (score: {anomaly_score:.3f}, risk: {risk_level})"
                 
                 # Check for blacklist violations
                 src_ip = row.get('src_ip', '')
