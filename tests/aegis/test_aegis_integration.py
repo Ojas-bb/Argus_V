@@ -79,6 +79,7 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-integration"
 
 runtime:
   log_level: "INFO"
@@ -317,11 +318,14 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  emergency_stop_file: "{self.temp_dir}/emergency.stop"
+  anonymization_salt: "test-salt-cli"
 
 runtime:
   log_level: "INFO"
   state_file: "{self.temp_dir}/state.json"
   stats_file: "{self.temp_dir}/stats.json"
+  pid_file: "{self.temp_dir}/aegis.pid"
 """
         
         self.config_file.write_text(config_content)
@@ -431,6 +435,9 @@ class TestFirebaseSyncIntegration:
         blacklist_manager._sqlite_db_path = self.temp_dir / "test_export.db"
         blacklist_manager._json_cache_path = self.temp_dir / "test_export.json"
         
+        # Re-initialize database at new path
+        blacklist_manager._initialize_database()
+
         # Add some test entries
         for i in range(5):
             blacklist_manager.add_to_blacklist(
@@ -551,6 +558,7 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-deploy"
 
 runtime:
   log_level: "INFO"
@@ -595,9 +603,14 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  emergency_stop_file: "{self.temp_dir}/emergency.stop"
+  anonymization_salt: "test-salt-offline"
 
 runtime:
   log_level: "INFO"
+  state_file: "{self.temp_dir}/state.json"
+  stats_file: "{self.temp_dir}/stats.json"
+  pid_file: "{self.temp_dir}/aegis.pid"
 """
         
         offline_config.write_text(config_content)
@@ -640,12 +653,13 @@ model:
   use_fallback_model: true
 
 enforcement:
-  dry_run_duration_days: 0  # Immediate expiry for testing
+  dry_run_duration_days: 1  # Short duration for testing
   enforce_after_dry_run: false
   blacklist_db_path: "{self.temp_dir}/blacklist.db"
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-dryrun"
 
 runtime:
   log_level: "INFO"
@@ -656,7 +670,7 @@ runtime:
         daemon = AegisDaemon(str(short_dry_run_config))
         
         # Verify dry run configuration
-        assert daemon.config.enforcement.dry_run_duration_days == 0
+        assert daemon.config.enforcement.dry_run_duration_days == 1
         assert daemon.config.enforcement.enforce_after_dry_run is False
         
         # Start daemon
