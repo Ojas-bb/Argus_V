@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from ..oracle_core.logging import configure_logging, log_event
+from ..oracle_core.logging import configure_logging, log_event, JsonFormatter, PrivacyFilter
 from .config import RetinaConfig
 from .daemon import RetinaDaemon
 
@@ -163,12 +163,29 @@ def configure_logging_from_args(args) -> logging.Logger:
     log_level = getattr(args, "log_level", None)
     log_file = getattr(args, "log_file", None)
     
-    # Set up logging configuration
+    # Configure base logging (sets up root logger with stream handler)
+    logger = configure_logging(level=log_level)
+
+    # Set up file logging if requested
     if log_file:
-        # TODO: Add file logging support
-        pass
+        try:
+            # Ensure directory exists
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create file handler
+            file_handler = logging.FileHandler(str(log_path))
+            file_handler.name = "argus_file"
+            file_handler.setFormatter(JsonFormatter())
+            file_handler.addFilter(PrivacyFilter())
+
+            # Add to root logger to capture all logs
+            logging.getLogger().addHandler(file_handler)
+
+        except Exception as e:
+            logger.error(f"Failed to setup file logging to {log_file}: {e}")
     
-    return configure_logging(level=log_level)
+    return logger
 
 
 def cmd_daemon(args, logger: logging.Logger) -> int:
