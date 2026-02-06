@@ -7,6 +7,7 @@ Firebase synchronization, IP handling, and iptables integration.
 from __future__ import annotations
 
 import json
+import ipaddress
 import logging
 import sqlite3
 import subprocess
@@ -848,22 +849,10 @@ class BlacklistManager:
             True if valid, False otherwise
         """
         try:
-            import ipaddress
             ipaddress.ip_address(ip_address)
             return True
-        except (ValueError, ImportError):
-            # Fallback validation if ipaddress module not available
-            parts = ip_address.split('.')
-            if len(parts) != 4:
-                return False
-            try:
-                for part in parts:
-                    num = int(part)
-                    if not (0 <= num <= 255):
-                        return False
-                return True
-            except ValueError:
-                return False
+        except ValueError:
+            return False
     
     def _is_dry_run_mode(self) -> bool:
         """Check if currently in dry run mode.
