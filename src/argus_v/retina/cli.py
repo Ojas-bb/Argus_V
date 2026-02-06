@@ -4,18 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import logging
 import signal
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
-from .daemon import RetinaDaemon
-from .config import RetinaConfig
 from ..oracle_core.logging import configure_logging, log_event
-from ..oracle_core.config import load_config
+from .config import RetinaConfig
+from .daemon import RetinaDaemon
 
 
 def setup_argparser() -> argparse.ArgumentParser:

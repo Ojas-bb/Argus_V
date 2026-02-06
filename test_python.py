@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Simple test to verify Python execution and imports."""
 import sys
+
 print(f"Python version: {sys.version}")
 
 try:

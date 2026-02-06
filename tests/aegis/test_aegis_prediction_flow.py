@@ -4,22 +4,19 @@ This module tests the complete prediction workflow from CSV polling through
 model inference to blacklist enforcement decisions.
 """
 
-import json
 import tempfile
-import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from argus_v.aegis.config import AegisConfig, ModelConfig, PollingConfig, PredictionConfig, EnforcementConfig
-from argus_v.aegis.model_manager import ModelManager, ModelLoadError
 from argus_v.aegis.blacklist_manager import BlacklistManager
-from argus_v.aegis.prediction_engine import PredictionEngine, CSVPollingError
+from argus_v.aegis.config import EnforcementConfig, ModelConfig, PollingConfig, PredictionConfig
+from argus_v.aegis.model_manager import ModelManager
+from argus_v.aegis.prediction_engine import PredictionEngine
 from argus_v.oracle_core.anonymize import HashAnonymizer
 
 
@@ -187,15 +184,13 @@ class TestBlacklistManager:
             iptables_chain_name="TEST-AEGIS-DROP",
             blacklist_default_ttl_hours=24,
             max_blacklist_entries=1000,
-            emergency_stop_file=str(self.temp_dir / "emergency.stop")
+            emergency_stop_file=str(self.temp_dir / "emergency.stop"),
+            blacklist_db_path=str(self.temp_dir / "test_blacklist.db"),
+            blacklist_json_path=str(self.temp_dir / "test_blacklist.json")
         )
         
         self.anonymizer = HashAnonymizer(salt="test-blacklist")
         self.blacklist_manager = BlacklistManager(self.enforcement_config, self.anonymizer)
-        
-        # Override database path for testing
-        self.blacklist_manager._sqlite_db_path = self.temp_dir / "test_blacklist.db"
-        self.blacklist_manager._json_cache_path = self.temp_dir / "test_blacklist.json"
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -205,12 +200,13 @@ class TestBlacklistManager:
     
     def test_blacklist_initialization(self):
         """Test blacklist manager initialization."""
+        import sqlite3
         assert self.blacklist_manager.config == self.enforcement_config
         assert self.blacklist_manager.anonymizer == self.anonymizer
         assert self.blacklist_manager._sqlite_db_path.exists()
         
         # Check database tables exist
-        with self.blacklist_manager._get_connection() as conn:
+        with sqlite3.connect(self.blacklist_manager._sqlite_db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
@@ -557,7 +553,9 @@ class TestDryRunTimer:
         self.enforcement_config = EnforcementConfig(
             dry_run_duration_days=7,
             enforce_after_dry_run=False,
-            emergency_stop_file=str(self.temp_dir / "emergency.stop")
+            emergency_stop_file=str(self.temp_dir / "emergency.stop"),
+            blacklist_db_path=str(self.temp_dir / "blacklist.db"),
+            blacklist_json_path=str(self.temp_dir / "blacklist.json")
         )
         
         self.daemon_start_time = datetime.now() - timedelta(days=5)  # 5 days ago
@@ -570,7 +568,6 @@ class TestDryRunTimer:
     
     def test_dry_run_duration_calculation(self):
         """Test dry run duration calculation."""
-        from argus_v.aegis.daemon import AegisDaemon
         
         # Mock daemon to test dry run calculation
         class MockDaemon:
@@ -646,17 +643,15 @@ class TestPredictionFlow:
 
         self.enforcement_config = EnforcementConfig(
             dry_run_duration_days=7,
-            emergency_stop_file=str(self.temp_dir / "emergency.stop")
+            emergency_stop_file=str(self.temp_dir / "emergency.stop"),
+            blacklist_db_path=str(self.temp_dir / "test.db"),
+            blacklist_json_path=str(self.temp_dir / "test.json")
         )
         
         # Create managers with real implementations
         self.anonymizer = HashAnonymizer(salt="integration-test")
         self.model_manager = ModelManager(self.model_config, self.anonymizer)
         self.blacklist_manager = BlacklistManager(self.enforcement_config, self.anonymizer)
-        
-        # Override paths for testing
-        self.blacklist_manager._sqlite_db_path = self.temp_dir / "test.db"
-        self.blacklist_manager._json_cache_path = self.temp_dir / "test.json"
         
         # Create prediction engine
         self.prediction_engine = PredictionEngine(

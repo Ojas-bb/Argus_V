@@ -7,13 +7,10 @@ validating setup, checking status, and managing artifacts.
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
-from pathlib import Path
 from typing import Optional
 
 from ..oracle_core.logging import configure_logging
-from ..oracle_core.config import load_config
 from .config import load_mnemosyne_config
 from .pipeline import MnemosynePipeline
 

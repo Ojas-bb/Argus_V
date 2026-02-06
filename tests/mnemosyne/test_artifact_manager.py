@@ -1,9 +1,9 @@
 """Unit tests for mnemosyne artifact manager module."""
 
-import pytest
-import json
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pytest
 
 from argus_v.mnemosyne.artifact_manager import ArtifactManager
 

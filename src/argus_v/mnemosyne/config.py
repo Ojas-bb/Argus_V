@@ -16,8 +16,6 @@ from ..oracle_core.validation import (
     ValidationError,
     ValidationIssue,
     as_bool,
-    as_float,
-    as_int,
     as_list,
     as_mapping,
     get_optional,
@@ -26,6 +24,7 @@ from ..oracle_core.validation import (
     require_positive_int,
     require_range_float,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class MnemosyneFirebaseConfig:

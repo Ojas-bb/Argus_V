@@ -1,9 +1,10 @@
 """Unit tests for mnemosyne data loading module."""
 
-import pytest
-import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pandas as pd
+import pytest
 
 from argus_v.mnemosyne.data_loader import FirebaseDataLoader
 

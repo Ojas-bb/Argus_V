@@ -9,15 +9,14 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from ..oracle_core.logging import log_event, configure_logging
+from ..oracle_core.logging import log_event
+from .artifact_manager import ArtifactManager
 from .config import MnemosyneConfig
 from .data_loader import FirebaseDataLoader
 from .preprocessing import FlowPreprocessor
 from .trainer import IsolationForestTrainer
-from .artifact_manager import ArtifactManager
-
 
 logger = logging.getLogger(__name__)
 

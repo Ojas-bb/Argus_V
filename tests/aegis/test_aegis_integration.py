@@ -5,20 +5,15 @@ configuration validation, Firebase sync simulation, and service management.
 """
 
 import json
-import os
-import signal
 import tempfile
-import threading
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 
-from argus_v.aegis.config import AegisConfig, load_aegis_config
-from argus_v.aegis.daemon import AegisDaemon, ServiceStartError
 from argus_v.aegis.cli import AegisCLI
+from argus_v.aegis.config import AegisConfig
+from argus_v.aegis.daemon import AegisDaemon
 
 
 class TestAegisDaemonIntegration:
@@ -46,6 +41,8 @@ class TestAegisDaemonIntegration:
 model:
   model_local_path: "{self.temp_dir}/models"
   scaler_local_path: "{self.temp_dir}/scalers"
+  foundation_model_path: "{self.temp_dir}/foundation_model.pkl"
+  foundation_scaler_path: "{self.temp_dir}/foundation_scaler.pkl"
   min_model_age_hours: 1
   max_model_age_days: 30
   use_fallback_model: true
@@ -78,6 +75,10 @@ enforcement:
   blacklist_default_ttl_hours: 24
   max_blacklist_entries: 10000
   emergency_stop_file: "{self.temp_dir}/emergency.stop"
+  blacklist_db_path: "{self.temp_dir}/blacklist.db"
+  blacklist_json_path: "{self.temp_dir}/blacklist.json"
+  feedback_dir: "{self.temp_dir}/feedback"
+  retrain_flag_file: "{self.temp_dir}/retrain_flag"
 
 runtime:
   log_level: "INFO"
@@ -250,7 +251,7 @@ model:
             daemon.stop()
             assert daemon._running is False
             
-        except Exception as e:
+        except Exception:
             # Ensure cleanup even if test fails
             daemon.stop()
             raise
@@ -301,6 +302,8 @@ class TestAegisCLIIntegration:
 model:
   model_local_path: "{self.temp_dir}/models"
   scaler_local_path: "{self.temp_dir}/scalers"
+  foundation_model_path: "{self.temp_dir}/foundation_model.pkl"
+  foundation_scaler_path: "{self.temp_dir}/foundation_scaler.pkl"
 
 polling:
   csv_directory: "{self.temp_dir}/csv"
@@ -310,6 +313,10 @@ prediction:
 
 enforcement:
   dry_run_duration_days: 7
+  blacklist_db_path: "{self.temp_dir}/blacklist.db"
+  blacklist_json_path: "{self.temp_dir}/blacklist.json"
+  feedback_dir: "{self.temp_dir}/feedback"
+  retrain_flag_file: "{self.temp_dir}/retrain_flag"
 
 runtime:
   log_level: "INFO"
@@ -335,7 +342,7 @@ runtime:
         cli = AegisCLI()
         
         # Test validation command
-        exit_code = cli.run(['validate', '--config', str(self.config_file)])
+        exit_code = cli.run(['--config', str(self.config_file), 'validate'])
         assert exit_code == 0
     
     def test_cli_status_command(self):
@@ -343,7 +350,7 @@ runtime:
         cli = AegisCLI()
         
         # Test status command (without starting daemon)
-        exit_code = cli.run(['status', '--config', str(self.config_file)])
+        exit_code = cli.run(['--config', str(self.config_file), 'status'])
         assert exit_code == 0
     
     def test_cli_health_command(self):
@@ -351,7 +358,7 @@ runtime:
         cli = AegisCLI()
         
         # Test health command (without starting daemon)
-        exit_code = cli.run(['health', '--config', str(self.config_file)])
+        exit_code = cli.run(['--config', str(self.config_file), 'health'])
         assert exit_code == 0
     
     def test_cli_model_commands(self):
@@ -359,7 +366,7 @@ runtime:
         cli = AegisCLI()
         
         # Test model info command
-        exit_code = cli.run(['model', 'info', '--config', str(self.config_file)])
+        exit_code = cli.run(['--config', str(self.config_file), 'model', 'info'])
         # Should succeed even without running daemon
         assert exit_code == 0
     
@@ -368,7 +375,7 @@ runtime:
         cli = AegisCLI()
         
         # Test blacklist list command
-        exit_code = cli.run(['blacklist', 'list', '--config', str(self.config_file)])
+        exit_code = cli.run(['--config', str(self.config_file), 'blacklist', 'list'])
         assert exit_code == 0
     
     def test_cli_help_and_error_handling(self):
@@ -384,7 +391,7 @@ runtime:
         assert exit_code == 1
         
         # Test missing config file
-        exit_code = cli.run(['validate', '--config', '/nonexistent/config.yaml'])
+        exit_code = cli.run(['--config', '/nonexistent/config.yaml', 'validate'])
         assert exit_code == 1
 
 
@@ -399,7 +406,11 @@ class TestFirebaseSyncIntegration:
             'iptables_chain_name': 'TEST-AEGIS-DROP',
             'blacklist_default_ttl_hours': 24,
             'max_blacklist_entries': 1000,
-            'emergency_stop_file': str(self.temp_dir / 'emergency.stop')
+            'emergency_stop_file': str(self.temp_dir / 'emergency.stop'),
+            'blacklist_db_path': str(self.temp_dir / 'blacklist.db'),
+            'blacklist_json_path': str(self.temp_dir / 'blacklist.json'),
+            'feedback_dir': str(self.temp_dir / 'feedback'),
+            'retrain_flag_file': str(self.temp_dir / 'retrain_flag')
         })()
     
     def teardown_method(self):
@@ -501,8 +512,10 @@ class TestServiceDeploymentIntegration:
         deploy_config = self.temp_dir / "deployment.yaml"
         config_content = f"""
 model:
-  model_local_path: "/var/lib/argus/models"
-  scaler_local_path: "/var/lib/argus/scalers"
+  model_local_path: "{self.temp_dir}/models"
+  scaler_local_path: "{self.temp_dir}/scalers"
+  foundation_model_path: "{self.temp_dir}/foundation_model.pkl"
+  foundation_scaler_path: "{self.temp_dir}/foundation_scaler.pkl"
   min_model_age_hours: 1
   max_model_age_days: 30
   use_fallback_model: true
@@ -510,7 +523,7 @@ model:
 
 polling:
   poll_interval_seconds: 5
-  csv_directory: "/var/lib/argus/retina/csv"
+  csv_directory: "{self.temp_dir}/retina/csv"
   batch_size: 100
 
 prediction:
@@ -533,13 +546,17 @@ enforcement:
   iptables_chain_name: "AEGIS-DROP"
   blacklist_default_ttl_hours: 24
   max_blacklist_entries: 10000
-  emergency_stop_file: "/var/run/argus/aegis.emergency"
+  emergency_stop_file: "{self.temp_dir}/aegis.emergency"
+  blacklist_db_path: "{self.temp_dir}/blacklist.db"
+  blacklist_json_path: "{self.temp_dir}/blacklist.json"
+  feedback_dir: "{self.temp_dir}/feedback"
+  retrain_flag_file: "{self.temp_dir}/retrain_flag"
 
 runtime:
   log_level: "INFO"
-  state_file: "/var/lib/argus/aegis/state.json"
-  stats_file: "/var/lib/argus/aegis/stats.json"
-  pid_file: "/var/run/argus/aegis.pid"
+  state_file: "{self.temp_dir}/aegis/state.json"
+  stats_file: "{self.temp_dir}/aegis/stats.json"
+  pid_file: "{self.temp_dir}/aegis.pid"
   health_check_port: 8080
   shutdown_timeout: 30
 """
@@ -550,9 +567,9 @@ runtime:
         daemon = AegisDaemon(str(deploy_config))
         
         # Verify deployment-like paths are configured
-        assert daemon.config.model.model_local_path == "/var/lib/argus/models"
-        assert daemon.config.state_file == "/var/lib/argus/aegis/state.json"
-        assert daemon.config.enforcement.emergency_stop_file == "/var/run/argus/aegis.emergency"
+        assert daemon.config.model.model_local_path == f"{self.temp_dir}/models"
+        assert daemon.config.state_file == f"{self.temp_dir}/aegis/state.json"
+        assert daemon.config.enforcement.emergency_stop_file == f"{self.temp_dir}/aegis.emergency"
         
         # Verify dry run configuration
         assert daemon.config.enforcement.dry_run_duration_days == 7
@@ -565,6 +582,8 @@ runtime:
 model:
   model_local_path: "{self.temp_dir}/local_models"
   scaler_local_path: "{self.temp_dir}/local_scalers"
+  foundation_model_path: "{self.temp_dir}/foundation_model.pkl"
+  foundation_scaler_path: "{self.temp_dir}/foundation_scaler.pkl"
   use_fallback_model: true
 
 polling:
@@ -572,6 +591,10 @@ polling:
 
 enforcement:
   dry_run_duration_days: 7
+  blacklist_db_path: "{self.temp_dir}/blacklist.db"
+  blacklist_json_path: "{self.temp_dir}/blacklist.json"
+  feedback_dir: "{self.temp_dir}/feedback"
+  retrain_flag_file: "{self.temp_dir}/retrain_flag"
 
 runtime:
   log_level: "INFO"
@@ -612,11 +635,17 @@ runtime:
         config_content = f"""
 model:
   model_local_path: "{self.temp_dir}/models"
+  foundation_model_path: "{self.temp_dir}/foundation_model.pkl"
+  foundation_scaler_path: "{self.temp_dir}/foundation_scaler.pkl"
   use_fallback_model: true
 
 enforcement:
   dry_run_duration_days: 0  # Immediate expiry for testing
   enforce_after_dry_run: false
+  blacklist_db_path: "{self.temp_dir}/blacklist.db"
+  blacklist_json_path: "{self.temp_dir}/blacklist.json"
+  feedback_dir: "{self.temp_dir}/feedback"
+  retrain_flag_file: "{self.temp_dir}/retrain_flag"
 
 runtime:
   log_level: "INFO"

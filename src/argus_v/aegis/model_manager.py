@@ -6,13 +6,11 @@ models and scalers from Firebase Storage, with fallback support and caching.
 
 from __future__ import annotations
 
-import json
 import logging
 import pickle
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     import firebase_admin
@@ -22,13 +20,11 @@ try:
 except ImportError:
     FIREBASE_AVAILABLE = False
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import IsolationForest
 
-from ..oracle_core.anonymize import HashAnonymizer
 from ..oracle_core.logging import log_event
-
 
 logger = logging.getLogger(__name__)
 

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import csv
 import logging
-import os
 import threading
 import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, TextIO
+from typing import Any, Dict, List, Optional, TextIO
 
 from .aggregator import WindowStats
 

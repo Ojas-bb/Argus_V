@@ -7,7 +7,6 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-
 DEFAULT_LOG_LEVEL = "INFO"
 
 _SENSITIVE_KEYS = frozenset(

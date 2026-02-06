@@ -14,7 +14,6 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -486,7 +485,7 @@ Examples:
         Returns:
             Exit code
         """
-        print(f"Stopping Aegis daemon...")
+        print("Stopping Aegis daemon...")
         
         try:
             daemon = self._load_daemon(args.config)
@@ -590,7 +589,7 @@ Examples:
             config = load_aegis_config(args.config)
             
             print("Configuration validation:")
-            print(f"  ✓ Configuration loaded successfully")
+            print("  ✓ Configuration loaded successfully")
             print(f"  ✓ Model path: {config.model.model_local_path}")
             print(f"  ✓ Scaler path: {config.model.scaler_local_path}")
             print(f"  ✓ CSV directory: {config.polling.csv_directory}")
@@ -694,7 +693,7 @@ Examples:
             
             # Test CSV prediction
             if args.csv:
-                print(f"\\n=== CSV Prediction Test ===")
+                print("\\n=== CSV Prediction Test ===")
                 csv_path = Path(args.csv)
                 if csv_path.exists():
                     print(f"Testing with CSV: {csv_path}")
@@ -1101,13 +1100,13 @@ Examples:
         
         service_info = health.get('service_info', {})
         if service_info:
-            print(f"\\nService Information:")
+            print("\\nService Information:")
             for key, value in service_info.items():
                 print(f"  {key}: {value}")
         
         components = health.get('component_details', {})
         if components:
-            print(f"\\nComponent Details:")
+            print("\\nComponent Details:")
             for name, details in components.items():
                 print(f"  {name}:")
                 for key, value in details.items():

@@ -10,10 +10,9 @@ import json
 import logging
 import sqlite3
 import subprocess
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     import firebase_admin
@@ -23,9 +22,8 @@ try:
 except ImportError:
     FIREBASE_AVAILABLE = False
 
-from ..oracle_core.logging import log_event
 from ..oracle_core import HashAnonymizer
-
+from ..oracle_core.logging import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +61,8 @@ class BlacklistManager:
         self.config = config
         self.anonymizer = anonymizer or HashAnonymizer(salt="aegis-blacklist")
         
-        self._sqlite_db_path = Path("/var/lib/argus/aegis/blacklist.db")
-        self._json_cache_path = Path("/var/lib/argus/aegis/blacklist.json")
+        self._sqlite_db_path = Path(config.blacklist_db_path)
+        self._json_cache_path = Path(config.blacklist_json_path)
         self._firebase_sync_enabled = FIREBASE_AVAILABLE
         self._last_sync_time = None
         self._sync_failures = 0

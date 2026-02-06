@@ -1,12 +1,12 @@
 """Unit tests for mnemosyne trainer module."""
 
-import pytest
-import pandas as pd
-import numpy as np
 import pickle
-from unittest.mock import Mock, patch
 from pathlib import Path
-import tempfile
+from unittest.mock import Mock, patch
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from argus_v.mnemosyne.trainer import IsolationForestTrainer
 

@@ -8,11 +8,11 @@ This module provides the Aegis runtime service for Raspberry Pi that:
 - Provides decentralized blacklist storage with Firebase sync
 """
 
+from .blacklist_manager import BlacklistManager
 from .config import AegisConfig
 from .daemon import AegisDaemon
 from .model_manager import ModelManager
 from .prediction_engine import PredictionEngine
-from .blacklist_manager import BlacklistManager
 
 __all__ = [
     "AegisConfig",

@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-
 SCHEMA_VERSION = 1
 
 # Shared feature keys used by collectors/aggregators. Components should extend these

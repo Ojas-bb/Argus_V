@@ -1,8 +1,10 @@
-import pytest
+from unittest.mock import Mock
+
 import pandas as pd
-from unittest.mock import Mock, MagicMock
-from argus_v.aegis.prediction_engine import PredictionEngine
+
 from argus_v.aegis.config import PollingConfig, PredictionConfig
+from argus_v.aegis.prediction_engine import PredictionEngine
+
 
 class TestTrustedIPSuppression:
     def setup_method(self):

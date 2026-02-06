@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..oracle_core.logging import log_event
 
@@ -26,9 +26,9 @@ class FeedbackManager:
             config: Aegis configuration object
         """
         self.config = config
-        self.feedback_dir = Path("/var/lib/argus/aegis/feedback")
+        self.feedback_dir = Path(config.enforcement.feedback_dir)
         self.trusted_ips_file = self.feedback_dir / "trusted_ips.json"
-        self.retrain_flag_file = Path("/var/lib/argus/mnemosyne/trigger_retrain")
+        self.retrain_flag_file = Path(config.enforcement.retrain_flag_file)
 
         # Cache for trusted IPs to avoid O(N) disk I/O on every prediction
         self._trusted_ips_cache = None

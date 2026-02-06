@@ -5,15 +5,12 @@ from __future__ import annotations
 import csv
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock
 
-import pytest
-
-from argus_v.retina.csv_rotator import (
-    MythologicalCSVRotator,
-    FirebaseCSVStager,
-)
 from argus_v.retina.aggregator import WindowStats
+from argus_v.retina.csv_rotator import (
+    FirebaseCSVStager,
+    MythologicalCSVRotator,
+)
 
 
 class TestMythologicalCSVRotator:

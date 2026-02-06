@@ -1,7 +1,10 @@
-import pytest
 import json
 from unittest.mock import MagicMock
+
+import pytest
+
 from src.argus_v.aegis.feedback_manager import FeedbackManager
+
 
 class HelperFeedbackManager(FeedbackManager):
     def __init__(self, config, root_path):
