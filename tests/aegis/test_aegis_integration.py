@@ -80,6 +80,7 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-integration"
 
 runtime:
   log_level: "INFO"
@@ -320,12 +321,15 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  emergency_stop_file: "{self.temp_dir}/emergency.stop"
+  anonymization_salt: "test-salt-cli"
 
 runtime:
   log_level: "INFO"
   anonymization_salt: "cli-test-salt"
   state_file: "{self.temp_dir}/state.json"
   stats_file: "{self.temp_dir}/stats.json"
+  pid_file: "{self.temp_dir}/aegis.pid"
 """
         
         self.config_file.write_text(config_content)
@@ -434,6 +438,9 @@ class TestFirebaseSyncIntegration:
         blacklist_manager._json_cache_path = self.temp_dir / "test_export.json"
         blacklist_manager._initialize_database()  # Re-initialize DB
         
+        # Re-initialize database at new path
+        blacklist_manager._initialize_database()
+
         # Add some test entries
         for i in range(5):
             blacklist_manager.add_to_blacklist(
@@ -555,6 +562,7 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-deploy"
 
 runtime:
   log_level: "INFO"
@@ -600,6 +608,8 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  emergency_stop_file: "{self.temp_dir}/emergency.stop"
+  anonymization_salt: "test-salt-offline"
 
 runtime:
   log_level: "INFO"
@@ -656,6 +666,7 @@ enforcement:
   blacklist_json_path: "{self.temp_dir}/blacklist.json"
   feedback_dir: "{self.temp_dir}/feedback"
   retrain_flag_file: "{self.temp_dir}/retrain_flag"
+  anonymization_salt: "test-salt-dryrun"
 
 runtime:
   log_level: "INFO"

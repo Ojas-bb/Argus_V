@@ -61,7 +61,6 @@ class BlacklistManager:
             anonymizer: Optional hash anonymizer for IP anonymization
         """
         self.config = config
-        self.anonymizer = anonymizer or HashAnonymizer(salt="aegis-blacklist")
         
         # Paths are loaded from config (which supports env var overrides)
         self._sqlite_db_path = Path(config.blacklist_db_path)

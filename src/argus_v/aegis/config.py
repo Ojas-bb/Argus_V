@@ -319,6 +319,9 @@ class EnforcementConfig:
     retrain_flag_file: str = field(default_factory=lambda: os.environ.get(
         "ARGUS_RETRAIN_FLAG_FILE", "/var/lib/argus/mnemosyne/trigger_retrain"))
 
+    # Security
+    anonymization_salt: str | None = None
+
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "EnforcementConfig":
         """Create EnforcementConfig from configuration mapping."""
@@ -397,6 +400,19 @@ class EnforcementConfig:
             path=f"{path}.retrain_flag_file"
         )
 
+        # Load anonymization salt
+        anonymization_salt = get_optional(data, "anonymization_salt", None)
+        if not anonymization_salt:
+            anonymization_salt = os.environ.get("ARGUS_ANONYMIZATION_SALT")
+
+        if not anonymization_salt:
+            raise ValidationError([
+                ValidationIssue(
+                    f"{path}.anonymization_salt",
+                    "must be provided in config or ARGUS_ANONYMIZATION_SALT environment variable"
+                )
+            ])
+
         return EnforcementConfig(
             dry_run_duration_days=dry_run_duration_days,
             enforce_after_dry_run=enforce_after_dry_run,
@@ -411,7 +427,8 @@ class EnforcementConfig:
             blacklist_db_path=blacklist_db_path,
             blacklist_json_path=blacklist_json_path,
             feedback_dir=feedback_dir,
-            retrain_flag_file=retrain_flag_file
+            retrain_flag_file=retrain_flag_file,
+            anonymization_salt=anonymization_salt
         )
 
 
