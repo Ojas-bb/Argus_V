@@ -6,6 +6,7 @@ Firebase synchronization, IP handling, and iptables integration.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import sqlite3
@@ -848,11 +849,10 @@ class BlacklistManager:
             True if valid, False otherwise
         """
         try:
-            import ipaddress
             ipaddress.ip_address(ip_address)
             return True
-        except (ValueError, ImportError):
-            # Fallback validation if ipaddress module not available
+        except ValueError:
+            # Fallback validation
             parts = ip_address.split('.')
             if len(parts) != 4:
                 return False
