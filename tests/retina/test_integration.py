@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 from argus_v.oracle_core.anonymize import AnonymizationConfig
@@ -16,6 +19,7 @@ class TestInterfaceFailureSimulation:
     
     def setup_method(self):
         """Set up test fixtures."""
+        self.test_dir = Path(tempfile.mkdtemp())
         # Create test configuration
         self.config = RetinaConfig(
             capture=CaptureConfig(
@@ -25,6 +29,7 @@ class TestInterfaceFailureSimulation:
             aggregation=AggregationConfig(
                 window_seconds=2,
                 max_rows_per_file=100,
+                output_dir=self.test_dir,
             ),
             health=HealthConfig(
                 max_drop_rate_percent=5.0,
@@ -32,6 +37,10 @@ class TestInterfaceFailureSimulation:
             ),
             anonymization=AnonymizationConfig(ip_salt=b"test_salt"),
         )
+
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        shutil.rmtree(self.test_dir)
     
     def test_interface_unavailable_on_startup(self):
         """Test daemon behavior when interface is unavailable on startup."""
@@ -233,6 +242,12 @@ class TestInterfaceFailureSimulation:
 class TestPCAPSampleProcessing:
     """Test processing of stored PCAP samples."""
     
+    def setup_method(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir)
+
     def test_pcap_sample_processing(self):
         """Test processing a sample PCAP file."""
         # This test would require a PCAP sample file
@@ -240,7 +255,10 @@ class TestPCAPSampleProcessing:
         
         config = RetinaConfig(
             capture=CaptureConfig(interface="lo"),
-            aggregation=AggregationConfig(window_seconds=1),
+            aggregation=AggregationConfig(
+                window_seconds=1,
+                output_dir=self.test_dir,
+            ),
             health=HealthConfig(),
             anonymization=AnonymizationConfig(ip_salt=b"test_salt"),
         )
@@ -286,7 +304,10 @@ class TestPCAPSampleProcessing:
         
         config = RetinaConfig(
             capture=CaptureConfig(interface="lo"),
-            aggregation=AggregationConfig(window_seconds=5),
+            aggregation=AggregationConfig(
+                window_seconds=5,
+                output_dir=self.test_dir,
+            ),
             health=HealthConfig(),
             anonymization=AnonymizationConfig(ip_salt=b"test_salt"),
         )
@@ -436,31 +457,38 @@ class TestEndToEndWorkflow:
     
     def test_daemon_lifecycle(self):
         """Test complete daemon lifecycle."""
-        config = RetinaConfig(
-            capture=CaptureConfig(interface="lo"),
-            aggregation=AggregationConfig(window_seconds=1),
-            health=HealthConfig(),
-            anonymization=AnonymizationConfig(ip_salt=b"test_salt"),
-        )
-        
-        daemon = RetinaDaemon(config)
-        
-        # Initially not running
-        assert not daemon.is_running()
-        
-        # Start daemon
-        daemon.start()
-        assert daemon.is_running()
-        
-        # Check initial status
-        status = daemon.get_status()
-        assert status["running"] is True
-        assert status["config"]["interface"] == "lo"
-        
-        # Stop daemon
-        daemon.stop()
-        assert not daemon.is_running()
-        
-        # Check final statistics
-        final_stats = daemon.get_status()["stats"]
-        assert final_stats["end_time"] is not None
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            config = RetinaConfig(
+                capture=CaptureConfig(interface="lo"),
+                aggregation=AggregationConfig(
+                    window_seconds=1,
+                    output_dir=temp_dir,
+                ),
+                health=HealthConfig(),
+                anonymization=AnonymizationConfig(ip_salt=b"test_salt"),
+            )
+
+            daemon = RetinaDaemon(config)
+
+            # Initially not running
+            assert not daemon.is_running()
+
+            # Start daemon
+            daemon.start()
+            assert daemon.is_running()
+
+            # Check initial status
+            status = daemon.get_status()
+            assert status["running"] is True
+            assert status["config"]["interface"] == "lo"
+
+            # Stop daemon
+            daemon.stop()
+            assert not daemon.is_running()
+
+            # Check final statistics
+            final_stats = daemon.get_status()["stats"]
+            assert final_stats["end_time"] is not None
+        finally:
+            shutil.rmtree(temp_dir)

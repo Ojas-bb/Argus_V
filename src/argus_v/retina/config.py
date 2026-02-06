@@ -149,6 +149,44 @@ class HealthConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class FirebaseConfig:
+    """Firebase configuration."""
+
+    enabled: bool = False
+    bucket_name: str = "argus-v-logs"
+    credentials_path: Optional[str] = None
+    upload_prefix: str = "retina_logs/"
+
+    @staticmethod
+    def from_mapping(data: Mapping[str, Any], *, path: str) -> "FirebaseConfig":
+        enabled = as_bool(
+            get_optional(data, "enabled", default=False),
+            path=f"{path}.enabled",
+        )
+
+        bucket_name = require_non_empty_str(
+            get_optional(data, "bucket_name", default="argus-v-logs"),
+            path=f"{path}.bucket_name",
+        )
+
+        credentials_path = get_optional(data, "credentials_path", default=None)
+        if credentials_path is not None:
+            credentials_path = require_non_empty_str(credentials_path, path=f"{path}.credentials_path")
+
+        upload_prefix = require_non_empty_str(
+            get_optional(data, "upload_prefix", default="retina_logs/"),
+            path=f"{path}.upload_prefix",
+        )
+
+        return FirebaseConfig(
+            enabled=enabled,
+            bucket_name=bucket_name,
+            credentials_path=credentials_path,
+            upload_prefix=upload_prefix,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RetinaConfig:
     """Complete retina configuration."""
     
@@ -156,6 +194,7 @@ class RetinaConfig:
     aggregation: AggregationConfig
     health: HealthConfig
     anonymization: AnonymizationConfig
+    firebase: FirebaseConfig = field(default_factory=FirebaseConfig)
     enabled: bool = True
     
     def ensure_output_dirs(self) -> None:
@@ -185,6 +224,10 @@ class RetinaConfig:
         health_data = as_mapping(get_optional(retina_data, "health", default={}), path="$.retina.health")
         health = HealthConfig.from_mapping(health_data, path="$.retina.health")
         
+        # Load firebase config
+        firebase_data = as_mapping(get_optional(retina_data, "firebase", default={}), path="$.retina.firebase")
+        firebase = FirebaseConfig.from_mapping(firebase_data, path="$.retina.firebase")
+
         # Load anonymization config
         anon_salt_raw = get_optional(retina_data, "ip_salt", default="default_salt_change_in_production")
         if isinstance(anon_salt_raw, str):
@@ -203,5 +246,6 @@ class RetinaConfig:
             aggregation=aggregation,
             health=health,
             anonymization=anonymization,
+            firebase=firebase,
             enabled=enabled,
         )

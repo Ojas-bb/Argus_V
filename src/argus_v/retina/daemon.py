@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Optional
 
+from ..hermes.uploader import FirebaseUploader
 from ..oracle_core.logging import log_event
 from .aggregator import PacketBatcher, WindowAggregator
 from .collector import CaptureEngine, InterfaceMonitor
@@ -29,6 +30,7 @@ class RetinaDaemon:
         self._batcher: Optional[PacketBatcher] = None
         self._csv_rotator: Optional[MythologicalCSVRotator] = None
         self._csv_stager: Optional[FirebaseCSVStager] = None
+        self._firebase_uploader: Optional[FirebaseUploader] = None
         self._health_monitor: Optional[HealthMonitor] = None
         
         # Control
@@ -194,6 +196,18 @@ class RetinaDaemon:
         staging_dir = self.config.aggregation.output_dir / "staging"
         self._csv_stager = FirebaseCSVStager(self._csv_rotator, staging_dir)
         
+        # Initialize Firebase uploader
+        if self.config.firebase.enabled:
+            try:
+                self._firebase_uploader = FirebaseUploader(
+                    bucket_name=self.config.firebase.bucket_name,
+                    credentials_path=self.config.firebase.credentials_path,
+                    upload_prefix=self.config.firebase.upload_prefix,
+                )
+                self.logger.info("Firebase uploader initialized")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize Firebase uploader: {e}")
+
         # Initialize health monitor
         self._health_monitor = HealthMonitor(
             max_drop_rate_percent=self.config.health.max_drop_rate_percent,
@@ -382,31 +396,40 @@ class RetinaDaemon:
                     self.logger.error(f"Health update error: {e}")
                     time.sleep(5.0)
         
-        def firebase_staging_worker():
-            """Worker thread for staging files for Firebase upload."""
-            while self._running:
-                try:
-                    if self._csv_stager:
-                        staged_files = self._csv_stager.stage_completed_files()
-                        for file_path in staged_files:
-                            self.logger.info(f"Staged file for Firebase upload: {file_path}")
-                            # TODO: Here you could trigger actual Firebase upload
-                    
-                    time.sleep(60.0)  # Check every minute
-                    
-                except Exception as e:
-                    self.logger.error(f"Firebase staging error: {e}")
-                    time.sleep(60.0)
-        
         # Start monitoring threads
         health_thread = threading.Thread(target=health_update_worker, daemon=True)
         health_thread.start()
         self._worker_threads.append(health_thread)
         
-        staging_thread = threading.Thread(target=firebase_staging_worker, daemon=True)
+        staging_thread = threading.Thread(target=self._firebase_staging_worker, daemon=True)
         staging_thread.start()
         self._worker_threads.append(staging_thread)
     
+    def _firebase_staging_worker(self) -> None:
+        """Worker thread for staging files for Firebase upload."""
+        while self._running:
+            try:
+                if self._csv_stager:
+                    staged_files = self._csv_stager.stage_completed_files()
+
+                    # Upload files if uploader is available
+                    if self._firebase_uploader and staged_files:
+                        for file_path in staged_files:
+                            self.logger.info(f"Staged file for Firebase upload: {file_path}")
+
+                            # Attempt upload
+                            if self._firebase_uploader.upload_file(file_path):
+                                # Mark as uploaded on success
+                                self._csv_stager.mark_uploaded(file_path)
+                            else:
+                                self.logger.warning(f"Failed to upload {file_path}, will retry later")
+
+                time.sleep(60.0)  # Check every minute
+
+            except Exception as e:
+                self.logger.error(f"Firebase staging error: {e}")
+                time.sleep(60.0)
+
     def _update_health_metrics_periodically(self) -> None:
         """Update health metrics periodically (called from packet callback)."""
         # This is a simple implementation - in practice you might want to
