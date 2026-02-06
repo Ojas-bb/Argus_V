@@ -33,9 +33,11 @@ class ModelConfig:
     """Configuration for Mnemosyne model loading and management."""
     
     # Model paths and loading
-    model_local_path: str = "/var/lib/argus/models"
+    model_local_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_MODEL_LOCAL_PATH", "/var/lib/argus/models"))
     model_download_timeout: int = 300  # 5 minutes
-    scaler_local_path: str = "/var/lib/argus/scalers"
+    scaler_local_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_SCALER_LOCAL_PATH", "/var/lib/argus/scalers"))
     scaler_download_timeout: int = 60
     
     # Model validation
@@ -47,14 +49,17 @@ class ModelConfig:
     fallback_prediction_threshold: float = 0.7
     
     # Foundation Model
-    foundation_model_path: str = "/var/lib/argus/foundation/model.pkl"
-    foundation_scaler_path: str = "/var/lib/argus/foundation/scaler.pkl"
+    foundation_model_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_FOUNDATION_MODEL_PATH", "/var/lib/argus/foundation/model.pkl"))
+    foundation_scaler_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_FOUNDATION_SCALER_PATH", "/var/lib/argus/foundation/scaler.pkl"))
 
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "ModelConfig":
         """Create ModelConfig from configuration mapping."""
         model_local_path = require_non_empty_str(
-            get_optional(data, "model_local_path", "/var/lib/argus/models"),
+            get_optional(data, "model_local_path", os.environ.get(
+                "ARGUS_MODEL_LOCAL_PATH", "/var/lib/argus/models")),
             path=f"{path}.model_local_path"
         )
         
@@ -64,7 +69,8 @@ class ModelConfig:
         )
         
         scaler_local_path = require_non_empty_str(
-            get_optional(data, "scaler_local_path", "/var/lib/argus/scalers"),
+            get_optional(data, "scaler_local_path", os.environ.get(
+                "ARGUS_SCALER_LOCAL_PATH", "/var/lib/argus/scalers")),
             path=f"{path}.scaler_local_path"
         )
         
@@ -100,12 +106,14 @@ class ModelConfig:
             ])
 
         foundation_model_path = require_non_empty_str(
-            get_optional(data, "foundation_model_path", "/var/lib/argus/foundation/model.pkl"),
+            get_optional(data, "foundation_model_path", os.environ.get(
+                "ARGUS_FOUNDATION_MODEL_PATH", "/var/lib/argus/foundation/model.pkl")),
             path=f"{path}.foundation_model_path"
         )
 
         foundation_scaler_path = require_non_empty_str(
-            get_optional(data, "foundation_scaler_path", "/var/lib/argus/foundation/scaler.pkl"),
+            get_optional(data, "foundation_scaler_path", os.environ.get(
+                "ARGUS_FOUNDATION_SCALER_PATH", "/var/lib/argus/foundation/scaler.pkl")),
             path=f"{path}.foundation_scaler_path"
         )
         
@@ -128,7 +136,8 @@ class PollingConfig:
     """Configuration for Retina CSV polling."""
     
     poll_interval_seconds: int = 5
-    csv_directory: str = "/var/lib/argus/retina/csv"
+    csv_directory: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_CSV_DIRECTORY", "/var/lib/argus/retina/csv"))
     processed_file_suffix: str = ".processed"
     max_poll_errors: int = 5
     poll_retry_delay: int = 30
@@ -143,7 +152,8 @@ class PollingConfig:
         )
         
         csv_directory = require_non_empty_str(
-            get_optional(data, "csv_directory", "/var/lib/argus/retina/csv"),
+            get_optional(data, "csv_directory", os.environ.get(
+                "ARGUS_CSV_DIRECTORY", "/var/lib/argus/retina/csv")),
             path=f"{path}.csv_directory"
         )
         
@@ -300,10 +310,14 @@ class EnforcementConfig:
     allow_manual_overrides: bool = True
     
     # Storage paths
-    blacklist_db_path: str = "/var/lib/argus/aegis/blacklist.db"
-    blacklist_json_path: str = "/var/lib/argus/aegis/blacklist.json"
-    feedback_dir: str = "/var/lib/argus/aegis/feedback"
-    retrain_flag_file: str = "/var/lib/argus/mnemosyne/trigger_retrain"
+    blacklist_db_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_BLACKLIST_DB_PATH", "/var/lib/argus/aegis/blacklist.db"))
+    blacklist_json_path: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_BLACKLIST_JSON_PATH", "/var/lib/argus/aegis/blacklist.json"))
+    feedback_dir: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_FEEDBACK_DIR", "/var/lib/argus/aegis/feedback"))
+    retrain_flag_file: str = field(default_factory=lambda: os.environ.get(
+        "ARGUS_RETRAIN_FLAG_FILE", "/var/lib/argus/mnemosyne/trigger_retrain"))
 
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "EnforcementConfig":
@@ -349,7 +363,8 @@ class EnforcementConfig:
         )
         
         emergency_stop_file = require_non_empty_str(
-            get_optional(data, "emergency_stop_file", "/var/run/argus/aegis.emergency"),
+            get_optional(data, "emergency_stop_file", os.environ.get(
+                "ARGUS_EMERGENCY_STOP_FILE", "/var/run/argus/aegis.emergency")),
             path=f"{path}.emergency_stop_file"
         )
         
@@ -359,22 +374,26 @@ class EnforcementConfig:
         )
         
         blacklist_db_path = require_non_empty_str(
-            get_optional(data, "blacklist_db_path", "/var/lib/argus/aegis/blacklist.db"),
+            get_optional(data, "blacklist_db_path", os.environ.get(
+                "ARGUS_BLACKLIST_DB_PATH", "/var/lib/argus/aegis/blacklist.db")),
             path=f"{path}.blacklist_db_path"
         )
 
         blacklist_json_path = require_non_empty_str(
-            get_optional(data, "blacklist_json_path", "/var/lib/argus/aegis/blacklist.json"),
+            get_optional(data, "blacklist_json_path", os.environ.get(
+                "ARGUS_BLACKLIST_JSON_PATH", "/var/lib/argus/aegis/blacklist.json")),
             path=f"{path}.blacklist_json_path"
         )
 
         feedback_dir = require_non_empty_str(
-            get_optional(data, "feedback_dir", "/var/lib/argus/aegis/feedback"),
+            get_optional(data, "feedback_dir", os.environ.get(
+                "ARGUS_FEEDBACK_DIR", "/var/lib/argus/aegis/feedback")),
             path=f"{path}.feedback_dir"
         )
 
         retrain_flag_file = require_non_empty_str(
-            get_optional(data, "retrain_flag_file", "/var/lib/argus/mnemosyne/trigger_retrain"),
+            get_optional(data, "retrain_flag_file", os.environ.get(
+                "ARGUS_RETRAIN_FLAG_FILE", "/var/lib/argus/mnemosyne/trigger_retrain")),
             path=f"{path}.retrain_flag_file"
         )
 
@@ -525,17 +544,20 @@ def load_aegis_config(
     )
     
     state_file = require_non_empty_str(
-        get_optional(runtime_data, "state_file", "/var/lib/argus/aegis/state.json"),
+        get_optional(runtime_data, "state_file", os.environ.get(
+            "ARGUS_STATE_FILE", "/var/lib/argus/aegis/state.json")),
         path="$.runtime.state_file"
     )
     
     pid_file = require_non_empty_str(
-        get_optional(runtime_data, "pid_file", "/var/run/argus/aegis.pid"),
+        get_optional(runtime_data, "pid_file", os.environ.get(
+            "ARGUS_PID_FILE", "/var/run/argus/aegis.pid")),
         path="$.runtime.pid_file"
     )
     
     stats_file = require_non_empty_str(
-        get_optional(runtime_data, "stats_file", "/var/lib/argus/aegis/stats.json"),
+        get_optional(runtime_data, "stats_file", os.environ.get(
+            "ARGUS_STATS_FILE", "/var/lib/argus/aegis/stats.json")),
         path="$.runtime.stats_file"
     )
     

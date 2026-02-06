@@ -61,6 +61,7 @@ class BlacklistManager:
         self.config = config
         self.anonymizer = anonymizer or HashAnonymizer(salt="aegis-blacklist")
         
+        # Paths are loaded from config (which supports env var overrides)
         self._sqlite_db_path = Path(config.blacklist_db_path)
         self._json_cache_path = Path(config.blacklist_json_path)
         self._firebase_sync_enabled = FIREBASE_AVAILABLE
