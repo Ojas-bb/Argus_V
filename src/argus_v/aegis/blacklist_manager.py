@@ -6,7 +6,9 @@ Firebase synchronization, IP handling, and iptables integration.
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import ipaddress
 import logging
 import sqlite3
 import subprocess
@@ -86,6 +88,8 @@ class BlacklistManager:
             'emergency_stops': 0
         }
         
+        self._iptables_available: Optional[bool] = None
+
         # Initialize storage systems
         self._ensure_directories()
         self._initialize_database()
@@ -725,6 +729,22 @@ class BlacklistManager:
             )
             return False
     
+    def _check_iptables_availability(self) -> bool:
+        """Check if iptables command is available (cached)."""
+        if self._iptables_available is None:
+            try:
+                subprocess.run(['iptables', '--version'],
+                             capture_output=True, check=True, timeout=5)
+                self._iptables_available = True
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                self._iptables_available = False
+                log_event(
+                    logger,
+                    "iptables_not_available",
+                    level="warning"
+                )
+        return self._iptables_available
+
     def _add_to_iptables(self, ip_address: str, reason: str, risk_level: str) -> bool:
         """Add IP address to iptables DROP chain.
         
@@ -738,15 +758,7 @@ class BlacklistManager:
         """
         try:
             # Check if iptables command is available
-            try:
-                subprocess.run(['iptables', '--version'], 
-                             capture_output=True, check=True, timeout=5)
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                log_event(
-                    logger,
-                    "iptables_not_available",
-                    level="warning"
-                )
+            if not self._check_iptables_availability():
                 return False
             
             # Add rule to drop traffic from IP
@@ -856,11 +868,11 @@ class BlacklistManager:
             True if valid, False otherwise
         """
         try:
-            import ipaddress
             ipaddress.ip_address(ip_address)
             return True
-        except (ValueError, ImportError):
-            # Fallback validation if ipaddress module not available
+        except ValueError:
+            return False
+            # Fallback validation
             parts = ip_address.split('.')
             if len(parts) != 4:
                 return False

@@ -226,7 +226,7 @@ class AegisDaemon:
             
             # Initialize anonymizer
             from ..oracle_core.anonymize import HashAnonymizer
-            anonymizer = HashAnonymizer(salt="aegis-runtime")
+            anonymizer = HashAnonymizer(salt=self.config.anonymization_salt)
             self._components['anonymizer'] = anonymizer
             
             # Initialize model manager

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
+import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +12,7 @@ from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -63,6 +66,49 @@ def load_license_file(path: str | Path) -> dict[str, Any]:
 
 def _canonical_payload(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _is_safe_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        # Resolve hostname to IPs
+        # proto=socket.IPPROTO_TCP to avoid unrelated results
+        # Use getaddrinfo to handle both IPv4 and IPv6
+        addr_info = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+
+        for _, _, _, _, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+
+            # Check for private, loopback, multicast, reserved, etc.
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_link_local
+                or ip.is_unspecified
+            ):
+                return False
+
+    except (ValueError, socket.gaierror, Exception):
+        # If parsing fails or DNS resolution fails, treat as unsafe
+        return False
+
+    return True
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def http_error_302(self, req, fp, code, msg, headers):
+        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
+
+    http_error_301 = http_error_302
+    http_error_303 = http_error_302
+    http_error_307 = http_error_302
 
 
 def verify_license_payload(payload: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -167,13 +213,26 @@ def verify_license_file(
             errors=["verification_url_not_https"],
         )
 
+    if not _is_safe_url(verification_url):
+        return LicenseVerificationResult(
+            status=LicenseStatus.invalid,
+            demo_mode=False,
+            ngo_id=ngo_id,
+            license_id=license_id,
+            verified_online=False,
+            errors=["verification_url_unsafe"],
+        )
+
     request = urllib.request.Request(
         verification_url,
         headers={"User-Agent": "argus-v-license-check/1.0"},
     )
 
+    # Use a custom opener that disables redirects to prevent SSRF via open redirects
+    opener = urllib.request.build_opener(NoRedirectHandler)
+
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as resp:
+        with opener.open(request, timeout=timeout_s) as resp:
             body = resp.read().decode("utf-8")
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         if offline_demo:

@@ -7,7 +7,6 @@ network flow data using scikit-learn, including model validation, serialization,
 from __future__ import annotations
 
 import logging
-import pickle
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import skops.io as sio
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.model_selection import GridSearchCV, train_test_split
@@ -240,12 +240,20 @@ class IsolationForestTrainer:
         if len(features_df) < 100:
             test_size = min(0.2, 20 / len(features_df))
 
-        X_train, X_test, _, y_test = train_test_split(
-            features_df,
-            true_labels,
-            test_size=test_size,
-            random_state=self.config.random_state,
-        )
+        if true_labels is not None:
+            X_train, X_test, _, y_test = train_test_split(
+                features_df,
+                true_labels,
+                test_size=test_size,
+                random_state=self.config.random_state,
+            )
+        else:
+            X_train, X_test = train_test_split(
+                features_df,
+                test_size=test_size,
+                random_state=self.config.random_state,
+            )
+            y_test = None
 
         if contamination is not None:
             training_contamination = float(contamination)
@@ -309,18 +317,16 @@ class IsolationForestTrainer:
         })
         
         # Define artifact paths
-        model_path = output_dir / f"{model_name}_model.pkl"
-        scaler_path = output_dir / f"{model_name}_scaler.pkl"
+        model_path = output_dir / f"{model_name}_model.skops"
+        scaler_path = output_dir / f"{model_name}_scaler.skops"
         metadata_path = output_dir / f"{model_name}_metadata.json"
         
         try:
             # Serialize model
-            with open(model_path, 'wb') as f:
-                pickle.dump(self._best_model, f)
+            sio.dump(self._best_model, model_path)
             
             # Serialize scaler
-            with open(scaler_path, 'wb') as f:
-                pickle.dump(scaler, f)
+            sio.dump(scaler, scaler_path)
             
             # Create metadata
             metadata = {
@@ -391,8 +397,11 @@ class IsolationForestTrainer:
             Loaded IsolationForest model
         """
         try:
-            with open(model_path, 'rb') as f:
-                model = pickle.load(f)
+            # Get untrusted types from the file to explicitly trust them
+            # This is safe because we trust the files we generate, but explicit trust
+            # is required by skops >= 0.10 for security.
+            trusted_types = sio.get_untrusted_types(file=model_path)
+            model = sio.load(model_path, trusted=trusted_types)
             
             log_event(
                 logger,

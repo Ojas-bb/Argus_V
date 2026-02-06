@@ -423,6 +423,9 @@ class AegisConfig:
     prediction: PredictionConfig
     enforcement: EnforcementConfig
     
+    # Security
+    anonymization_salt: str
+
     # Optional integrations
     firebase: FirebaseConfig | None = None
     github: GitHubConfig | None = None
@@ -473,6 +476,7 @@ class AegisConfig:
                 "state_file": self.state_file,
                 "stats_file": self.stats_file,
                 "health_check_port": self.health_check_port,
+                "anonymization_salt": "***",  # Redacted
             },
             "firebase": {
                 "enabled": self.firebase is not None,
@@ -565,6 +569,20 @@ def load_aegis_config(
         get_optional(runtime_data, "shutdown_timeout", 30),
         path="$.runtime.shutdown_timeout"
     )
+
+    anonymization_salt = get_optional(
+        runtime_data,
+        "anonymization_salt",
+        os.environ.get("AEGIS_SALT")
+    )
+
+    if not anonymization_salt:
+        raise ValidationError([
+            ValidationIssue(
+                "$.runtime.anonymization_salt",
+                "Anonymization salt is required in config or AEGIS_SALT env var"
+            )
+        ])
     
     # Load optional Firebase configuration
     firebase: FirebaseConfig | None = None
@@ -591,6 +609,7 @@ def load_aegis_config(
         polling=polling,
         prediction=prediction,
         enforcement=enforcement,
+        anonymization_salt=anonymization_salt,
         firebase=firebase,
         github=github,
         log_level=log_level,
