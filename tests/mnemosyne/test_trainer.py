@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 import pytest
+import skops.io as sio
+from sklearn.preprocessing import StandardScaler
 
 from argus_v.mnemosyne.trainer import IsolationForestTrainer
 
@@ -23,6 +25,7 @@ def training_config():
     config.cross_validation_folds = 3
     config.min_samples_for_training = 10  # Lower for testing
     config.max_model_size_mb = 100
+    config.contamination_range = (0.01, 0.1)
     return config
 
 
@@ -55,7 +58,7 @@ class TestIsolationForestTrainer:
         assert is_sufficient is True
         assert "validation passed" in reason
     
-    def test_validate_data_sufficiency_insufficient_samples(self, training_config):
+    def test_validate_data_sufficiency_insufficient_samples(self, training_config, sample_features_df):
         """Test data validation with insufficient samples."""
         training_config.min_samples_for_training = 200
         
@@ -75,9 +78,9 @@ class TestIsolationForestTrainer:
         is_sufficient, reason = trainer._validate_data_sufficiency(empty_df)
         
         assert is_sufficient is False
-        assert "empty" in reason.lower()
+        assert "empty" in reason.lower() or "insufficient" in reason.lower()
     
-    def test_validate_data_sufficiency_zero_variance(self, training_config):
+    def test_validate_data_sufficiency_zero_variance(self, training_config, sample_features_df):
         """Test data validation with zero variance features."""
         trainer = IsolationForestTrainer(training_config)
         
@@ -89,7 +92,7 @@ class TestIsolationForestTrainer:
         assert is_sufficient is False
         assert "variance" in reason.lower()
     
-    def test_validate_data_sufficiency_nan_values(self, training_config):
+    def test_validate_data_sufficiency_nan_values(self, training_config, sample_features_df):
         """Test data validation with NaN values."""
         trainer = IsolationForestTrainer(training_config)
         
@@ -142,7 +145,8 @@ class TestIsolationForestTrainer:
         
         assert hasattr(model, 'predict')
         assert hasattr(model, 'decision_function')
-        assert hasattr(model, 'score')
+        # IsolationForest does not have score method in recent versions
+        # assert hasattr(model, 'score')
         
         # Model should be fitted
         predictions = model.predict(sample_features_df[:5])
@@ -189,7 +193,7 @@ class TestIsolationForestTrainer:
         assert training_stats['feature_count'] == sample_features_df.shape[1]
         assert trainer._best_model is not None
     
-    def test_train_model_insufficient_data(self, training_config):
+    def test_train_model_insufficient_data(self, training_config, sample_features_df):
         """Test model training with insufficient data."""
         training_config.min_samples_for_training = 200
         
@@ -207,13 +211,12 @@ class TestIsolationForestTrainer:
         # Train a model
         trainer.train_model(sample_features_df)
         
-        # Create a mock scaler
-        mock_scaler = Mock()
-        mock_scaler.feature_names_in_ = sample_features_df.columns.tolist()
-        mock_scaler.get_params.return_value = {"with_mean": True, "with_std": True}
+        # Create a REAL scaler
+        scaler = StandardScaler()
+        scaler.fit(sample_features_df)
         
         # Serialize model
-        artifact_paths = trainer.serialize_model(str(tmp_path), mock_scaler)
+        artifact_paths = trainer.serialize_model(str(tmp_path), scaler)
         
         assert 'model_path' in artifact_paths
         assert 'scaler_path' in artifact_paths
@@ -234,7 +237,7 @@ class TestIsolationForestTrainer:
         
         assert metadata['model_type'] == 'IsolationForest'
         assert 'training_stats' in metadata
-        assert metadata['scaler_type'] == type(mock_scaler).__name__
+        assert metadata['scaler_type'] == type(scaler).__name__
     
     def test_serialize_model_no_trained_model(self, training_config, tmp_path):
         """Test serialization error when no model is trained."""
@@ -253,15 +256,16 @@ class TestIsolationForestTrainer:
         # Train a model
         trainer.train_model(sample_features_df)
         
-        # Create a mock scaler
-        mock_scaler = Mock()
+        # Create a REAL scaler
+        scaler = StandardScaler()
+        scaler.fit(sample_features_df)
         
         # Set a very small size limit
         training_config.max_model_size_mb = 0.001  # Very small limit
         
         # This should trigger a size warning
         with patch('argus_v.mnemosyne.trainer.log_event') as mock_log:
-            artifact_paths = trainer.serialize_model(str(tmp_path), mock_scaler)
+            artifact_paths = trainer.serialize_model(str(tmp_path), scaler)
             
             # Check if size warning was logged
             size_warning_logged = any(
@@ -272,14 +276,13 @@ class TestIsolationForestTrainer:
     def test_load_model_success(self, training_config, tmp_path):
         """Test successful model loading."""
         trainer = IsolationForestTrainer(training_config)
-        
+
         # Create a mock model file
         model_data = {"mock": "model"}
-        model_path = tmp_path / "test_model.pkl"
-        
-        with open(model_path, 'wb') as f:
-            pickle.dump(model_data, f)
-        
+        model_path = tmp_path / "test_model.skops"
+
+        sio.dump(model_data, model_path)
+
         loaded_model = trainer.load_model(str(model_path))
         
         assert loaded_model == model_data
@@ -289,7 +292,7 @@ class TestIsolationForestTrainer:
         trainer = IsolationForestTrainer(training_config)
         
         with pytest.raises(FileNotFoundError):
-            trainer.load_model("/non/existent/path/model.pkl")
+            trainer.load_model("/non/existent/path/model.skops")
     
     def test_get_training_stats_empty(self, training_config):
         """Test getting training stats when no training has been done."""

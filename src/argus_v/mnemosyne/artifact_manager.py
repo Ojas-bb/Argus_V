@@ -190,7 +190,7 @@ class ArtifactManager:
             blobs = self._storage_client.list_blobs(prefix=prefix)
             
             for blob in blobs:
-                if not blob.name.endswith(('.pkl', '.json')):
+                if not blob.name.endswith(('.pkl', '.skops', '.json')):
                     continue
                 
                 if cutoff_time and blob.updated < cutoff_time:
