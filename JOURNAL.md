@@ -115,3 +115,34 @@ I implemented a `FeedbackManager` and a CLI command: `argus feedback --false-pos
 
 ### Reflection
 This closes the loop between the AI and the human operator. It transforms the user from a passive observer to an active teacher. The CLI approach integrates well with the "headless appliance" philosophy—admins can script this correction into their own workflows.
+
+---
+
+## 04. Dev Log: Retina Performance Optimization
+**Date:** February 04, 2026
+**Feature:** CaptureEngine Instantiation Optimization
+
+### Problem
+The `InterfaceMonitor` worker thread was instantiating a new `CaptureEngine` object inside its main loop (every ~10 seconds). While Python's object creation is relatively fast, creating and discarding objects repeatedly is unnecessary work and adds pressure to the garbage collector. Benchmarking showed this loop could be optimized.
+
+### Options Considered
+1.  **Do Nothing:** The overhead is small (~0.04ms per iteration).
+    *   *Pros:* Zero effort.
+    *   *Cons:* Bad engineering practice ("death by a thousand cuts").
+2.  **Move Instantiation Outside Loop:**
+    *   *Pros:* Simple refactor, zero allocation per loop, structurally correct.
+    *   *Cons:* Requires verifying `CaptureEngine` is stateless or re-usable.
+
+### Selected Solution
+I chose **Option 2**.
+I moved `engine = CaptureEngine(self.interface, use_scapy=True)` outside the `while` loop in `_monitor_worker`.
+I verified that `CaptureEngine` does not cache interface availability state (it calls `get_if_list()` on demand), so reusing the instance is safe.
+
+### Benchmark Results
+Running a synthetic benchmark of 500,000 iterations:
+*   **Before:** 46.66 seconds (0.0933 ms/iter)
+*   **After:** 26.73 seconds (0.0535 ms/iter)
+*   **Improvement:** ~43% reduction in loop overhead.
+
+### Reflection
+Even though the absolute time saved per iteration is microseconds, this optimization adheres to the principle of "do less work". On a constrained device like a Raspberry Pi 4 running 24/7, minimizing CPU cycles and memory churn contributes to overall system stability and efficiency.

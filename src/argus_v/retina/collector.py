@@ -392,10 +392,11 @@ class InterfaceMonitor:
     
     def _monitor_worker(self) -> None:
         """Worker thread for interface monitoring."""
+        # Use capture engine to check interface availability
+        engine = CaptureEngine(self.interface, use_scapy=True)
+
         while not self._stop_event.is_set():
             try:
-                # Use capture engine to check interface availability
-                engine = CaptureEngine(self.interface, use_scapy=True)
                 is_available = engine.is_interface_available()
                 
                 if is_available != self._is_available:
