@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import ipaddress
 import logging
 import sqlite3
 import subprocess
@@ -862,6 +863,7 @@ class BlacklistManager:
             ipaddress.ip_address(ip_address)
             return True
         except ValueError:
+            return False
             # Fallback validation
             parts = ip_address.split('.')
             if len(parts) != 4:
