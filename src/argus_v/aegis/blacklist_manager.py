@@ -62,15 +62,7 @@ class BlacklistManager:
         """
         self.config = config
         
-        # Initialize anonymizer with configured salt
-        if not anonymizer:
-            if not getattr(config, 'anonymization_salt', None):
-                # This should be caught by configuration validation, but as a safety net
-                raise ValueError("Anonymization salt must be configured")
-            self.anonymizer = HashAnonymizer(salt=config.anonymization_salt)
-        else:
-            self.anonymizer = anonymizer
-
+        # Paths are loaded from config (which supports env var overrides)
         self._sqlite_db_path = Path(config.blacklist_db_path)
         self._json_cache_path = Path(config.blacklist_json_path)
         self._firebase_sync_enabled = FIREBASE_AVAILABLE
