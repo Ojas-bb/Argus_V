@@ -12,6 +12,8 @@ from typing import Any, Callable, Iterator, Optional
 
 try:
     from scapy.all import conf, get_if_addr, get_if_list, getmacbyip
+    from scapy.layers.inet import ICMP, IP, TCP, UDP
+    from scapy.layers.inet6 import IPv6
     HAS_SCAPY = True
 except ImportError:
     HAS_SCAPY = False
@@ -221,9 +223,6 @@ class CaptureEngine:
     def _convert_scapy_packet(self, packet) -> Optional[PacketInfo]:
         """Convert scapy packet to PacketInfo."""
         try:
-            from scapy.layers.inet import ICMP, IP, TCP, UDP
-            from scapy.layers.inet6 import IPv6
-            
             timestamp = time.time()
             interface = self.interface
             
