@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import time
-import threading
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from argus_v.retina.collector import (
-    CaptureEngine, 
-    InterfaceMonitor, 
-    PacketInfo
-)
+from argus_v.retina.collector import CaptureEngine, InterfaceMonitor, PacketInfo
 
 
 class TestPacketInfo:

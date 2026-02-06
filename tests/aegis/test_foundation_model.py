@@ -1,14 +1,14 @@
-import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-import pandas as pd
 import pickle
+from unittest.mock import patch
+
 import numpy as np
+import pytest
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
 from argus_v.aegis.config import ModelConfig
 from argus_v.aegis.model_manager import ModelManager
+
 
 class TestFoundationModel:
 

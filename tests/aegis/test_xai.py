@@ -1,8 +1,11 @@
-import pytest
-import pandas as pd
-import numpy as np
 from unittest.mock import MagicMock
+
+import numpy as np
+import pandas as pd
+import pytest
+
 from src.argus_v.aegis.model_manager import ModelManager
+
 
 class MockScaler:
     def __init__(self, mean, scale):

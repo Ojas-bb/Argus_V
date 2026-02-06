@@ -19,12 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..oracle_core.logging import configure_logging, log_event
-from .config import AegisConfig, load_aegis_config
-from .model_manager import ModelManager
 from .blacklist_manager import BlacklistManager
-from .prediction_engine import PredictionEngine
+from .config import load_aegis_config
 from .feedback_manager import FeedbackManager
-
+from .model_manager import ModelManager
+from .prediction_engine import PredictionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +170,8 @@ class AegisDaemon:
                     issues.append(f"No write permission for directory {dir_path}")
             
             # Check file paths
-            if Path(self.config.emergency_stop_file).parent != Path('/'):
-                emergency_dir = Path(self.config.emergency_stop_file).parent
+            if Path(self.config.enforcement.emergency_stop_file).parent != Path('/'):
+                emergency_dir = Path(self.config.enforcement.emergency_stop_file).parent
                 if not emergency_dir.exists():
                     try:
                         emergency_dir.mkdir(parents=True, exist_ok=True)

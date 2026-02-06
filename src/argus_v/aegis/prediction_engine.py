@@ -6,21 +6,19 @@ processes flow data through the Mnemosyne model, and makes enforcement decisions
 
 from __future__ import annotations
 
-import csv
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from queue import Queue, Empty
-from typing import Any, Dict, List, Optional, Tuple
+from queue import Empty, Queue
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
 from ..oracle_core.logging import log_event
-from .model_manager import ModelManager, ModelLoadError
 from .blacklist_manager import BlacklistManager
-
+from .model_manager import ModelLoadError, ModelManager
 
 logger = logging.getLogger(__name__)
 

@@ -1,15 +1,15 @@
 """Unit tests for mnemosyne configuration module."""
 
-import pytest
-import tempfile
 import os
-from pathlib import Path
+import tempfile
+
+import pytest
 
 from argus_v.mnemosyne.config import (
-    MnemosyneFirebaseConfig,
-    PreprocessingConfig,
-    ModelTrainingConfig,
     MnemosyneConfig,
+    MnemosyneFirebaseConfig,
+    ModelTrainingConfig,
+    PreprocessingConfig,
     load_mnemosyne_config,
 )
 

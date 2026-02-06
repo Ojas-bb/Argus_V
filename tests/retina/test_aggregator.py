@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import time
-import threading
 from unittest.mock import Mock
 
-import pytest
-
 from argus_v.retina.aggregator import (
-    WindowAggregator, 
-    PacketBatcher, 
-    FlowKey, 
-    FlowStats, 
-    WindowStats
+    FlowKey,
+    FlowStats,
+    PacketBatcher,
+    WindowAggregator,
+    WindowStats,
 )
 from argus_v.retina.collector import PacketInfo
 

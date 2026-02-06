@@ -5,7 +5,7 @@ import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path

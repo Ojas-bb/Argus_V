@@ -8,12 +8,11 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from queue import Queue, SimpleQueue
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from queue import Queue
+from typing import Any, Callable, Dict, List, Optional
 
-from .collector import PacketInfo
 from ..oracle_core.anonymize import hash_ip, round_epoch_seconds
+from .collector import PacketInfo
 
 logger = logging.getLogger(__name__)
 

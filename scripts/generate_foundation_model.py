@@ -9,9 +9,10 @@ on synthetic data that approximates normal IoT network traffic patterns
 This solves the "Security Theater" problem of starting with a random model.
 """
 
-import pickle
 import argparse
+import pickle
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
@@ -120,13 +121,13 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Generating synthetic traffic data...")
+    print("Generating synthetic traffic data...")
     df = generate_synthetic_traffic(10000)
 
     # Ensure correct column order
     df = df[FEATURE_COLUMNS]
 
-    print(f"Training Foundation Model (Isolation Forest)...")
+    print("Training Foundation Model (Isolation Forest)...")
 
     # Initialize Scaler
     scaler = StandardScaler()

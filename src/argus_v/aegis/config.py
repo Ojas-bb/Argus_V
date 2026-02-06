@@ -299,6 +299,12 @@ class EnforcementConfig:
     emergency_stop_file: str = "/var/run/argus/aegis.emergency"
     allow_manual_overrides: bool = True
     
+    # Storage paths
+    blacklist_db_path: str = "/var/lib/argus/aegis/blacklist.db"
+    blacklist_json_path: str = "/var/lib/argus/aegis/blacklist.json"
+    feedback_dir: str = "/var/lib/argus/aegis/feedback"
+    retrain_flag_file: str = "/var/lib/argus/mnemosyne/trigger_retrain"
+
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "EnforcementConfig":
         """Create EnforcementConfig from configuration mapping."""
@@ -352,6 +358,26 @@ class EnforcementConfig:
             path=f"{path}.allow_manual_overrides"
         )
         
+        blacklist_db_path = require_non_empty_str(
+            get_optional(data, "blacklist_db_path", "/var/lib/argus/aegis/blacklist.db"),
+            path=f"{path}.blacklist_db_path"
+        )
+
+        blacklist_json_path = require_non_empty_str(
+            get_optional(data, "blacklist_json_path", "/var/lib/argus/aegis/blacklist.json"),
+            path=f"{path}.blacklist_json_path"
+        )
+
+        feedback_dir = require_non_empty_str(
+            get_optional(data, "feedback_dir", "/var/lib/argus/aegis/feedback"),
+            path=f"{path}.feedback_dir"
+        )
+
+        retrain_flag_file = require_non_empty_str(
+            get_optional(data, "retrain_flag_file", "/var/lib/argus/mnemosyne/trigger_retrain"),
+            path=f"{path}.retrain_flag_file"
+        )
+
         return EnforcementConfig(
             dry_run_duration_days=dry_run_duration_days,
             enforce_after_dry_run=enforce_after_dry_run,
@@ -362,7 +388,11 @@ class EnforcementConfig:
             max_blacklist_entries=max_blacklist_entries,
             blacklist_cleanup_interval=blacklist_cleanup_interval,
             emergency_stop_file=emergency_stop_file,
-            allow_manual_overrides=allow_manual_overrides
+            allow_manual_overrides=allow_manual_overrides,
+            blacklist_db_path=blacklist_db_path,
+            blacklist_json_path=blacklist_json_path,
+            feedback_dir=feedback_dir,
+            retrain_flag_file=retrain_flag_file
         )
 
 

@@ -22,7 +22,6 @@ except ImportError:
 
 from ..oracle_core.logging import log_event
 
-
 logger = logging.getLogger(__name__)
 
 

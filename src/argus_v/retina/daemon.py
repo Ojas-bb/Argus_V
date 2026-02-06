@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import logging
-import signal
 import threading
 import time
-from pathlib import Path
 from typing import Optional
 
-from .collector import CaptureEngine, InterfaceMonitor
-from .aggregator import WindowAggregator, PacketBatcher
-from .csv_rotator import MythologicalCSVRotator, FirebaseCSVStager
-from .health_monitor import HealthMonitor
-from .config import RetinaConfig
 from ..oracle_core.logging import log_event
+from .aggregator import PacketBatcher, WindowAggregator
+from .collector import CaptureEngine, InterfaceMonitor
+from .config import RetinaConfig
+from .csv_rotator import FirebaseCSVStager, MythologicalCSVRotator
+from .health_monitor import HealthMonitor
 
 
 class RetinaDaemon:

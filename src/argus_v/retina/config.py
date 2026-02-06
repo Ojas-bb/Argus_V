@@ -2,24 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..oracle_core.anonymize import AnonymizationConfig
 from ..oracle_core.validation import (
     ValidationError,
     ValidationIssue,
     as_bool,
-    as_int,
-    as_list,
     as_mapping,
     get_optional,
-    get_required,
     require_non_empty_str,
     require_positive_int,
 )
-from ..oracle_core.anonymize import AnonymizationConfig
 
 
 @dataclass(frozen=True, slots=True)

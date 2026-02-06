@@ -7,9 +7,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from queue import Queue, SimpleQueue
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)

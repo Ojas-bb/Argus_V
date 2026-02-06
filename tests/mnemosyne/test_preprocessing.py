@@ -1,9 +1,10 @@
 """Unit tests for mnemosyne preprocessing module."""
 
-import pytest
-import pandas as pd
-import numpy as np
 from unittest.mock import Mock
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from argus_v.mnemosyne.preprocessing import FlowPreprocessor
 

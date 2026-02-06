@@ -1,10 +1,10 @@
 """Unit tests for mnemosyne pipeline orchestration."""
 
-import pytest
-import pandas as pd
-import numpy as np
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+from unittest.mock import Mock, patch
+
+import pandas as pd
+import pytest
 
 from argus_v.mnemosyne.pipeline import MnemosynePipeline
 

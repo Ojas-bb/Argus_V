@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import threading
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-import pytest
-
-from argus_v.retina.daemon import RetinaDaemon
-from argus_v.retina.config import RetinaConfig, CaptureConfig, AggregationConfig, HealthConfig
-from argus_v.retina.collector import CaptureEngine
 from argus_v.oracle_core.anonymize import AnonymizationConfig
+from argus_v.retina.collector import CaptureEngine
+from argus_v.retina.config import AggregationConfig, CaptureConfig, HealthConfig, RetinaConfig
+from argus_v.retina.daemon import RetinaDaemon
 
 
 class TestInterfaceFailureSimulation:
