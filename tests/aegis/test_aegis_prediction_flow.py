@@ -320,7 +320,7 @@ class TestBlacklistManager:
         assert not Path(self.enforcement_config.emergency_stop_file).exists()
     
     def test_firebase_sync_simulation(self):
-        """Test Firebase sync simulation (when Firebase is not available)."""
+        """Test Firebase sync simulation."""
         # Add some test entries
         for i in range(5):
             self.blacklist_manager.add_to_blacklist(
@@ -329,15 +329,17 @@ class TestBlacklistManager:
                 risk_level="low"
             )
         
-        # Try sync (should simulate since Firebase is not available)
+        # Try sync
         success = self.blacklist_manager.sync_with_firebase()
         
-        # Should return False when Firebase is not available
-        assert success is False
-        
-        # But should still log the attempt
-        stats = self.blacklist_manager.get_statistics()
-        assert stats['sync_failures'] >= 1
+        if self.blacklist_manager._firebase_sync_enabled:
+            assert success is True
+        else:
+            # Should return False when Firebase is not available
+            assert success is False
+            # But should still log the attempt
+            stats = self.blacklist_manager.get_statistics()
+            assert stats['sync_failures'] >= 1
 
 
 class TestPredictionEngine:
