@@ -864,18 +864,6 @@ class BlacklistManager:
             return True
         except ValueError:
             return False
-            # Fallback validation
-            parts = ip_address.split('.')
-            if len(parts) != 4:
-                return False
-            try:
-                for part in parts:
-                    num = int(part)
-                    if not (0 <= num <= 255):
-                        return False
-                return True
-            except ValueError:
-                return False
     
     def _is_dry_run_mode(self) -> bool:
         """Check if currently in dry run mode.
