@@ -33,6 +33,7 @@ class TestTrustedIPSuppression:
         """Test that trusted IPs do not generate anomalies."""
         # 1. Setup mock feedback manager logic
         # IP 1 is trusted, IP 2 is not
+        self.mock_feedback_manager.get_trusted_ips.return_value = [{'ip': '192.168.1.100'}]
         self.mock_feedback_manager.is_trusted.side_effect = lambda ip: ip == '192.168.1.100'
 
         # 2. Create flow data with anomalies

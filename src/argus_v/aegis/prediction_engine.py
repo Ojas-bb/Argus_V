@@ -666,122 +666,60 @@ class PredictionEngine:
             predictions_df: DataFrame with prediction results
         """
         try:
-            for _, row in predictions_df.iterrows():
-                # Determine if action is needed
-                action_needed = False
-                action_reason = ""
-                risk_level = "low"
-                
-                # Check prediction results
-                prediction = row.get('prediction', 1)
-                anomaly_score = row.get('anomaly_score', 0)
-                risk_level = row.get('risk_level', 'low')
-                
-                # Check for trusted IPs (Immediate Relief)
-                src_ip = row.get('src_ip', '')
-                dst_ip = row.get('dst_ip', '')
+            # 1. Pre-fetch Trusted IPs (Set Lookup O(1))
+            trusted_ips = set()
+            if self.feedback_manager:
+                try:
+                    trusted_list = self.feedback_manager.get_trusted_ips()
+                    if trusted_list:
+                        trusted_ips = {entry.get('ip') for entry in trusted_list}
+                except Exception as e:
+                    log_event(logger, "trusted_ip_fetch_failed", level="error", error=str(e))
 
-                is_trusted = False
-                if self.feedback_manager:
-                    if src_ip and self.feedback_manager.is_trusted(src_ip):
-                        is_trusted = True
-                    elif dst_ip and self.feedback_manager.is_trusted(dst_ip):
-                        is_trusted = True
+            # 2. Identify Unique IPs in the batch
+            unique_src = predictions_df['src_ip'].dropna().unique()
+            unique_dst = predictions_df['dst_ip'].dropna().unique()
+            all_unique_ips = set(unique_src) | set(unique_dst)
 
-                if is_trusted:
-                    # Trusted IP (Active Learning Feedback) - suppress alert
-                    log_event(
-                        logger,
-                        "anomaly_suppressed_trusted_ip",
-                        level="debug",
-                        src_ip=src_ip,
-                        dst_ip=dst_ip
-                    )
-                    continue
+            # 3. Batch Check Blacklist Status (Cache: ip -> is_blacklisted)
+            blacklisted_ips = set()
+            for ip in all_unique_ips:
+                if ip and ip not in trusted_ips:
+                    if self.blacklist_manager.is_blacklisted(ip):
+                        blacklisted_ips.add(ip)
 
-                if prediction == -1:  # Anomaly detected
-                    action_needed = True
+            # 4. Vectorized Masks for Actionable Rows
+            # Anomaly: prediction == -1 AND NOT trusted
+            # Blacklist: src or dst is blacklisted
 
-                    # Generate explanation for the anomaly
-                    explanation = self.model_manager.explain_anomaly(row)
-                    explanation_str = ", ".join(explanation)
+            is_anomaly = predictions_df['prediction'] == -1
+            is_trusted = (predictions_df['src_ip'].isin(trusted_ips)) | \
+                         (predictions_df['dst_ip'].isin(trusted_ips))
+            is_blacklisted = (predictions_df['src_ip'].isin(blacklisted_ips)) | \
+                             (predictions_df['dst_ip'].isin(blacklisted_ips))
 
-                    action_reason = f"Anomaly detected: {explanation_str} (score: {anomaly_score:.3f})"
-                    
-                    if risk_level in ['high', 'critical']:
-                        action_needed = True
-                        action_reason = f"High-risk anomaly: {explanation_str} (score: {anomaly_score:.3f}, risk: {risk_level})"
-                
-                # Check for blacklist violations
-                src_ip = row.get('src_ip', '')
-                dst_ip = row.get('dst_ip', '')
-                
-                if src_ip and self.blacklist_manager.is_blacklisted(src_ip):
-                    action_needed = True
-                    action_reason = f"Source IP {src_ip} is blacklisted"
-                elif dst_ip and self.blacklist_manager.is_blacklisted(dst_ip):
-                    action_needed = True
-                    action_reason = f"Destination IP {dst_ip} is blacklisted"
-                
-                # Take enforcement action if needed
-                if action_needed:
-                    # Add violating IPs to blacklist
-                    if src_ip:
-                        success = self.blacklist_manager.add_to_blacklist(
-                            ip_address=src_ip,
-                            reason=f"Aegis prediction: {action_reason}",
-                            source="prediction",
-                            risk_level=risk_level,
-                            enforce=False,  # Will be enforced by blacklist manager based on dry-run mode
-                            metadata={
-                                'csv_file': self._stats.get('last_processed_file'),
-                                'prediction_score': float(anomaly_score),
-                                'flow_details': {
-                                    'dst_ip': dst_ip,
-                                    'src_port': row.get('src_port'),
-                                    'dst_port': row.get('dst_port'),
-                                    'protocol': row.get('protocol'),
-                                    'bytes_in': row.get('bytes_in'),
-                                    'bytes_out': row.get('bytes_out')
-                                }
-                            }
-                        )
-                        
-                        if success:
-                            self._stats['blacklist_additions'] += 1
-                    
-                    # Log enforcement decision
-                    log_event(
-                        logger,
-                        "enforcement_action_decision",
-                        level="info",
-                        src_ip=src_ip,
-                        dst_ip=dst_ip,
-                        reason=action_reason,
-                        risk_level=risk_level,
-                        prediction_score=float(anomaly_score)
-                    )
-                
-                # Update anomaly statistics
-                if prediction == -1:
-                    self._stats['anomalies_detected'] += 1
-                    
-                    log_event(
-                        logger,
-                        "anomaly_detected",
-                        level="info",
-                        src_ip=src_ip,
-                        dst_ip=dst_ip,
-                        anomaly_score=float(anomaly_score),
-                        risk_level=risk_level
-                    )
+            # Actionable if (Anomaly OR Blacklisted) AND NOT Trusted
+            # This matches original behavior: if trusted, skip everything.
+            actionable_mask = (is_anomaly | is_blacklisted) & ~is_trusted
+            actionable_df = predictions_df[actionable_mask]
+
+            # Update anomaly statistics (excluding trusted ones, matching filtered logic)
+            # actionable_df might have non-anomalies (pure blacklist hits), so we filter again to count
+            real_anomalies_count = len(actionable_df[actionable_df['prediction'] == -1])
+            self._stats['anomalies_detected'] += real_anomalies_count
+
+            # 5. Fast Iteration over Actionable Rows
+            if not actionable_df.empty:
+                for row in actionable_df.itertuples(index=False):
+                    self._process_single_row(row, blacklisted_ips)
             
             log_event(
                 logger,
                 "batch_predictions_processed",
                 level="debug",
                 batch_size=len(predictions_df),
-                anomalies_detected=len(predictions_df[predictions_df['prediction'] == -1]),
+                anomalies_detected=len(predictions_df[predictions_df['prediction'] == -1]), # Raw anomaly count (incl trusted)
+                actionable_rows=len(actionable_df),
                 enforcement_actions=self._stats['blacklist_additions']
             )
             
@@ -793,6 +731,105 @@ class PredictionEngine:
                 error=str(e)
             )
             raise
+
+    def _process_single_row(self, row: Any, blacklisted_ips: set) -> None:
+        """Process a single actionable row (logging and enforcement).
+
+        Args:
+            row: NamedTuple row from itertuples
+            blacklisted_ips: Set of currently blacklisted IPs
+        """
+        action_needed = False
+        action_reason = ""
+
+        # Access attributes safely via getattr
+        prediction = getattr(row, 'prediction', 1)
+        anomaly_score = getattr(row, 'anomaly_score', 0)
+        risk_level = getattr(row, 'risk_level', 'low')
+        src_ip = getattr(row, 'src_ip', '')
+        dst_ip = getattr(row, 'dst_ip', '')
+
+        # Anomaly Detection
+        if prediction == -1:
+            action_needed = True
+
+            # Generate explanation - requires converting row to Series/Dict-like
+            # We construct a Series only when needed
+            try:
+                row_dict = row._asdict()
+                row_series = pd.Series(row_dict)
+                explanation = self.model_manager.explain_anomaly(row_series)
+                explanation_str = ", ".join(explanation)
+            except Exception:
+                explanation_str = "Explanation unavailable"
+
+            action_reason = f"Anomaly detected: {explanation_str} (score: {anomaly_score:.3f})"
+
+            if risk_level in ['high', 'critical']:
+                action_needed = True
+                action_reason = f"High-risk anomaly: {explanation_str} (score: {anomaly_score:.3f}, risk: {risk_level})"
+
+        # Blacklist Violation (Redundant check? No, we need the specific reason)
+        if src_ip and src_ip in blacklisted_ips:
+            action_needed = True
+            action_reason = f"Source IP {src_ip} is blacklisted"
+        elif dst_ip and dst_ip in blacklisted_ips:
+            action_needed = True
+            action_reason = f"Destination IP {dst_ip} is blacklisted"
+
+        # Take enforcement action
+        if action_needed:
+            # Add violating IPs to blacklist
+            if src_ip:
+                # Prepare metadata
+                metadata = {
+                    'csv_file': self._stats.get('last_processed_file'),
+                    'prediction_score': float(anomaly_score),
+                    'flow_details': {
+                        'dst_ip': dst_ip,
+                        'src_port': getattr(row, 'src_port', None),
+                        'dst_port': getattr(row, 'dst_port', None),
+                        'protocol': getattr(row, 'protocol', None),
+                        'bytes_in': getattr(row, 'bytes_in', None),
+                        'bytes_out': getattr(row, 'bytes_out', None)
+                    }
+                }
+
+                success = self.blacklist_manager.add_to_blacklist(
+                    ip_address=src_ip,
+                    reason=f"Aegis prediction: {action_reason}",
+                    source="prediction",
+                    risk_level=risk_level,
+                    enforce=False,
+                    metadata=metadata
+                )
+
+                if success:
+                    self._stats['blacklist_additions'] += 1
+
+            # Log enforcement decision
+            log_event(
+                logger,
+                "enforcement_action_decision",
+                level="info",
+                src_ip=src_ip,
+                dst_ip=dst_ip,
+                reason=action_reason,
+                risk_level=risk_level,
+                prediction_score=float(anomaly_score)
+            )
+
+            # Log specific anomaly event (if it was an anomaly)
+            if prediction == -1:
+                log_event(
+                    logger,
+                    "anomaly_detected",
+                    level="info",
+                    src_ip=src_ip,
+                    dst_ip=dst_ip,
+                    anomaly_score=float(anomaly_score),
+                    risk_level=risk_level
+                )
     
     def _reset_stats(self) -> None:
         """Reset internal statistics."""
