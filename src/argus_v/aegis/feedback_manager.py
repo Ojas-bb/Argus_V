@@ -45,7 +45,9 @@ class FeedbackManager:
             with open(self.trusted_ips_file, 'w') as f:
                 json.dump([], f)
 
-    def report_false_positive(self, ip_address: str, reason: str = "User reported false positive") -> bool:
+    def report_false_positive(
+        self, ip_address: str, reason: str = "User reported false positive"
+    ) -> bool:
         """Report an IP as a false positive (trusted).
 
         Args:
