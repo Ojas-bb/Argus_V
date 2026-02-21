@@ -128,20 +128,7 @@ generate_secure_salt() {
         fi
     fi
 
-    # Method 2: Python secrets (Reliable alternative, Python is a dependency)
-    # variable PYTHON_BIN is set by check_python
-    local py_bin="${PYTHON_BIN:-python3}"
-    if command -v "$py_bin" >/dev/null 2>&1; then
-        local py_salt
-        if py_salt=$("$py_bin" -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null); then
-             if [[ -n "$py_salt" ]]; then
-                echo "$py_salt"
-                return 0
-            fi
-        fi
-    fi
-
-    # Method 3: /dev/urandom (Linux standard fallback)
+    # Method 2: /dev/urandom (Linux standard fallback)
     if [[ -r /dev/urandom ]]; then
         # Read from urandom, filter for hex chars, take first 64
         local urandom_salt
