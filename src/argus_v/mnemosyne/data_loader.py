@@ -7,6 +7,7 @@ Storage and Realtime Database for ML training.
 from __future__ import annotations
 
 import logging
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Generator, List, Optional
@@ -139,64 +140,63 @@ class FirebaseDataLoader:
             DataFrames containing flow data from each CSV file
         """
         for file_path in file_paths:
-            try:
-                # Download file to temporary location
-                blob = self._storage_client.blob(file_path)
-                temp_path = f"/tmp/{Path(file_path).name}"
-                
-                blob.download_to_filename(temp_path)
-                
-                # Load CSV data
-                df = pd.read_csv(temp_path)
-                
-                # Validate expected columns
-                expected_columns = [
-                    'timestamp', 'src_ip', 'dst_ip', 'src_port', 'dst_port',
-                    'protocol', 'bytes_in', 'bytes_out', 'packets_in', 'packets_out',
-                    'duration'
-                ]
-                
-                missing_columns = [col for col in expected_columns if col not in df.columns]
-                if missing_columns:
+            # Use a secure temporary directory for each file to prevent TOCTOU/symlink attacks
+            with tempfile.TemporaryDirectory(prefix="argus_mnemosyne_") as temp_dir:
+                try:
+                    # Download file to temporary location
+                    blob = self._storage_client.blob(file_path)
+                    temp_path = Path(temp_dir) / Path(file_path).name
+
+                    blob.download_to_filename(str(temp_path))
+
+                    # Load CSV data
+                    df = pd.read_csv(temp_path)
+
+                    # Validate expected columns
+                    expected_columns = [
+                        'timestamp', 'src_ip', 'dst_ip', 'src_port', 'dst_port',
+                        'protocol', 'bytes_in', 'bytes_out', 'packets_in', 'packets_out',
+                        'duration'
+                    ]
+
+                    missing_columns = [col for col in expected_columns if col not in df.columns]
+                    if missing_columns:
+                        log_event(
+                            logger,
+                            "missing_columns_in_csv",
+                            level="warning",
+                            file_path=file_path,
+                            missing_columns=missing_columns
+                        )
+                        continue
+
+                    # Convert timestamp column
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+                    # Basic data validation
+                    df = df.dropna()
+                    df = df[(df['bytes_in'] >= 0) & (df['bytes_out'] >= 0)]
+
                     log_event(
                         logger,
-                        "missing_columns_in_csv",
-                        level="warning",
+                        "csv_loaded_successfully",
+                        level="info",
                         file_path=file_path,
-                        missing_columns=missing_columns
+                        rows=len(df),
+                        columns=list(df.columns)
+                    )
+
+                    yield df
+
+                except Exception as e:
+                    log_event(
+                        logger,
+                        "failed_to_load_csv",
+                        level="error",
+                        file_path=file_path,
+                        error=str(e)
                     )
                     continue
-                
-                # Convert timestamp column
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
-                
-                # Basic data validation
-                df = df.dropna()
-                df = df[(df['bytes_in'] >= 0) & (df['bytes_out'] >= 0)]
-                
-                log_event(
-                    logger,
-                    "csv_loaded_successfully",
-                    level="info",
-                    file_path=file_path,
-                    rows=len(df),
-                    columns=list(df.columns)
-                )
-                
-                yield df
-                
-                # Cleanup temporary file
-                Path(temp_path).unlink(missing_ok=True)
-                
-            except Exception as e:
-                log_event(
-                    logger,
-                    "failed_to_load_csv",
-                    level="error",
-                    file_path=file_path,
-                    error=str(e)
-                )
-                continue
     
     def combine_flows(self, file_paths: List[str]) -> pd.DataFrame:
         """Combine multiple CSV files into a single DataFrame.
