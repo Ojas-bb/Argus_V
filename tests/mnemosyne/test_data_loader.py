@@ -133,17 +133,15 @@ class TestFirebaseDataLoader:
         mock_bucket = Mock()
         mock_blob = Mock()
         mock_blob.download_to_filename.return_value = None
+        mock_bucket.blob.return_value = mock_blob
         
         with patch('argus_v.mnemosyne.data_loader.storage.bucket', return_value=mock_bucket):
-            with patch('argus_v.mnemosyne.data_loader.Path') as mock_path:
-                mock_path.return_value.unlink.return_value = None
-                
-                loader = FirebaseDataLoader(firebase_config)
-                dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
-                
-                assert len(dataframes) == 1
-                assert len(dataframes[0]) == 3  # 3 rows
-                assert list(dataframes[0].columns) == list(sample_flow_data.columns)
+            loader = FirebaseDataLoader(firebase_config)
+            dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
+
+            assert len(dataframes) == 1
+            assert len(dataframes[0]) == 3  # 3 rows
+            assert list(dataframes[0].columns) == list(sample_flow_data.columns)
     
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
@@ -151,22 +149,31 @@ class TestFirebaseDataLoader:
     def test_load_csv_flows_missing_columns(self, mock_read_csv, mock_storage, mock_firebase_admin, firebase_config):
         """Test CSV loading with missing columns."""
         # Create data with missing columns
-        incomplete_data = sample_flow_data.copy()
-        incomplete_data = incomplete_data.drop(columns=['bytes_in'])
-        mock_read_csv.return_value = incomplete_data
+        incomplete_data = {
+            'timestamp': [datetime.now()],
+            'src_ip': ['1.1.1.1'],
+            'dst_ip': ['2.2.2.2'],
+            'src_port': [80],
+            'dst_port': [12345],
+            'protocol': ['TCP'],
+            # 'bytes_in' is missing
+            'bytes_out': [500],
+            'packets_in': [10],
+            'packets_out': [5],
+            'duration': [1.5]
+        }
+        mock_read_csv.return_value = pd.DataFrame(incomplete_data)
         
         mock_bucket = Mock()
         mock_blob = Mock()
+        mock_bucket.blob.return_value = mock_blob
         
         with patch('argus_v.mnemosyne.data_loader.storage.bucket', return_value=mock_bucket):
-            with patch('argus_v.mnemosyne.data_loader.Path') as mock_path:
-                mock_path.return_value.unlink.return_value = None
-                
-                loader = FirebaseDataLoader(firebase_config)
-                dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
-                
-                # Should return empty list due to missing columns
-                assert len(dataframes) == 0
+            loader = FirebaseDataLoader(firebase_config)
+            dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
+
+            # Should return empty list due to missing columns
+            assert len(dataframes) == 0
     
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
@@ -174,24 +181,32 @@ class TestFirebaseDataLoader:
     def test_load_csv_flows_with_invalid_data(self, mock_read_csv, mock_storage, mock_firebase_admin, firebase_config):
         """Test CSV loading with invalid data."""
         # Create data with NaN and negative values
-        invalid_data = sample_flow_data.copy()
-        invalid_data.loc[0, 'bytes_in'] = -100  # Negative value
-        invalid_data.loc[1, 'bytes_in'] = None   # NaN value
-        mock_read_csv.return_value = invalid_data
+        data = {
+            'timestamp': [datetime.now(), datetime.now(), datetime.now()],
+            'src_ip': ['1.1.1.1', '1.1.1.2', '1.1.1.3'],
+            'dst_ip': ['2.2.2.1', '2.2.2.2', '2.2.2.3'],
+            'src_port': [80, 80, 80],
+            'dst_port': [12345, 12346, 12347],
+            'protocol': ['TCP', 'TCP', 'TCP'],
+            'bytes_in': [-100, None, 500], # Negative, NaN, Valid
+            'bytes_out': [500, 500, 500],
+            'packets_in': [10, 10, 10],
+            'packets_out': [5, 5, 5],
+            'duration': [1.5, 1.5, 1.5]
+        }
+        mock_read_csv.return_value = pd.DataFrame(data)
         
         mock_bucket = Mock()
         mock_blob = Mock()
+        mock_bucket.blob.return_value = mock_blob
         
         with patch('argus_v.mnemosyne.data_loader.storage.bucket', return_value=mock_bucket):
-            with patch('argus_v.mnemosyne.data_loader.Path') as mock_path:
-                mock_path.return_value.unlink.return_value = None
-                
-                loader = FirebaseDataLoader(firebase_config)
-                dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
-                
-                # Should return DataFrame with invalid rows removed
-                assert len(dataframes) == 1
-                assert len(dataframes[0]) == 1  # Only valid row remains
+            loader = FirebaseDataLoader(firebase_config)
+            dataframes = list(loader.load_csv_flows(["flows/training/test.csv"]))
+
+            # Should return DataFrame with invalid rows removed
+            assert len(dataframes) == 1
+            assert len(dataframes[0]) == 1  # Only valid row remains
     
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
