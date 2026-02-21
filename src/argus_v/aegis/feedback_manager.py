@@ -32,6 +32,7 @@ class FeedbackManager:
 
         # Cache for trusted IPs to avoid O(N) disk I/O on every prediction
         self._trusted_ips_cache = None
+        self._trusted_ips_set = None
 
         self._ensure_directories()
 
@@ -44,7 +45,9 @@ class FeedbackManager:
             with open(self.trusted_ips_file, 'w') as f:
                 json.dump([], f)
 
-    def report_false_positive(self, ip_address: str, reason: str = "User reported false positive") -> bool:
+    def report_false_positive(
+        self, ip_address: str, reason: str = "User reported false positive"
+    ) -> bool:
         """Report an IP as a false positive (trusted).
 
         Args:
@@ -59,7 +62,7 @@ class FeedbackManager:
             trusted_ips = self._load_trusted_ips()
 
             # Check if already trusted
-            if any(entry['ip'] == ip_address for entry in trusted_ips):
+            if ip_address in self._trusted_ips_set:
                 log_event(logger, "ip_already_trusted", ip_address=ip_address)
                 return True
 
@@ -78,6 +81,7 @@ class FeedbackManager:
 
             # Update cache
             self._trusted_ips_cache = trusted_ips
+            self._trusted_ips_set.add(ip_address)
 
             log_event(logger, "false_positive_reported", ip_address=ip_address)
             return True
@@ -105,6 +109,9 @@ class FeedbackManager:
         """Load trusted IPs from storage or cache."""
         # Return in-memory cache if available
         if self._trusted_ips_cache is not None:
+            # Ensure set is initialized if missing (e.g. skipped __init__)
+            if getattr(self, '_trusted_ips_set', None) is None:
+                self._trusted_ips_set = {entry['ip'] for entry in self._trusted_ips_cache}
             return self._trusted_ips_cache
 
         # Otherwise load from disk
@@ -112,8 +119,11 @@ class FeedbackManager:
             with open(self.trusted_ips_file, 'r') as f:
                 data = json.load(f)
                 self._trusted_ips_cache = data
+                self._trusted_ips_set = {entry['ip'] for entry in data}
                 return data
         except Exception:
+            self._trusted_ips_cache = []
+            self._trusted_ips_set = set()
             return []
 
     def get_trusted_ips(self) -> List[Dict[str, Any]]:
@@ -130,5 +140,5 @@ class FeedbackManager:
             True if IP is in trusted list, False otherwise.
         """
         # Use cached list for performance
-        trusted_ips = self._load_trusted_ips()
-        return any(entry['ip'] == ip_address for entry in trusted_ips)
+        self._load_trusted_ips()
+        return ip_address in self._trusted_ips_set
