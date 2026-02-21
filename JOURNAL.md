@@ -141,3 +141,37 @@ I introduced `_iptables_available` state to `BlacklistManager`. The check runs o
 
 ### Reflection
 This is a "low-hanging fruit" optimization. While Python is not C++, avoiding unnecessary system calls is a universal principle of performance engineering. This ensures that the enforcement loop remains tight, allowing Argus to keep up with faster packet rates.
+
+---
+
+## 05. Dev Log: Optimizing Trusted IP Lookup
+**Date:** February 21, 2026
+**Feature:** FeedbackManager Lookup Optimization
+
+### Problem
+The `FeedbackManager.is_trusted` method was performing a linear search ($O(N)$) over a list of dictionaries to check if an IP was trusted.
+As the list of trusted IPs grows (e.g., thousands of false positives over time), this operation becomes a bottleneck in the packet processing loop, adding significant latency to every decision.
+A benchmark showed that checking 2000 IPs against a list of 10,000 trusted IPs took ~1.3 seconds.
+
+### Options Considered
+1.  **Binary Search:** Maintain a sorted list.
+    *   *Pros:* $O(\log N)$. Memory efficient.
+    *   *Cons:* Insertion is $O(N)$. Implementation complexity.
+2.  **Database Index:** Use SQLite with an index.
+    *   *Pros:* Robust, scalable.
+    *   *Cons:* Disk I/O overhead (even with caching, SQLite has some overhead). Overkill for a simple list.
+3.  **Hash Set (In-Memory):** Maintain a Python `set` of trusted IPs alongside the list.
+    *   *Pros:* $O(1)$ lookup. Extremely fast.
+    *   *Cons:* Slightly more memory usage (duplication of IP strings).
+
+### Selected Solution
+I chose **Option 3 (Hash Set)**.
+I modified `FeedbackManager` to maintain a `_trusted_ips_set` alongside the `_trusted_ips_cache`.
+-   `is_trusted` checks the set ($O(1)$).
+-   `report_false_positive` updates both the list (for storage) and the set (for runtime).
+-   `_load_trusted_ips` populates both from disk.
+
+### Reflection
+The performance improvement was dramatic: the benchmark time dropped from ~1.3s to ~0.0008s (>1500x speedup).
+This optimization ensures that the "allowed" path (trusted IPs) is as fast as possible, which is critical for minimizing latency for legitimate traffic.
+The memory overhead is negligible for the scale of this system (thousands of IPs).
