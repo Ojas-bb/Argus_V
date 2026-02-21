@@ -450,10 +450,14 @@ check_python() {
     minor=$($PYTHON_BIN -c 'import sys; print(sys.version_info[1])')
 
     if [[ $major -ne 3 ]] || [[ $minor -lt 11 ]]; then
-        die "Python 3.11+ is required to run this ARGUS_V build. Please upgrade Python and re-run the installer."
+        # Check if we meet the minimum 3.8 requirement (which was checked earlier, but we re-verify here)
+        if [[ $major -lt 3 ]] || [[ $major -eq 3 && $minor -lt 8 ]]; then
+             die "Python 3.8 or later is required. Found: ${PYTHON_VERSION}"
+        fi
+        warn "Python 3.11+ is recommended for ARGUS_V. Running with ${PYTHON_VERSION} may have limited functionality."
+    else
+        success "Python version check passed (${PYTHON_BIN})"
     fi
-
-    success "Python version check passed (${PYTHON_BIN})"
 }
 
 # Install system dependencies
