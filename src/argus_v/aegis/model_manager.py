@@ -739,9 +739,14 @@ class ModelManager:
             result_df['probability'] = probabilities
             
             # Classify risk levels
-            result_df['risk_level'] = result_df['anomaly_score'].apply(
-                self._classify_risk_level
-            )
+            abs_score = result_df['anomaly_score'].abs()
+            conds = [
+                abs_score >= self.high_risk_threshold,
+                abs_score >= self.anomaly_threshold,
+                abs_score >= self.anomaly_threshold * 0.5,
+            ]
+            choices = ["critical", "high", "medium"]
+            result_df['risk_level'] = np.select(conds, choices, default="low")
             
             log_event(
                 logger,
@@ -805,27 +810,6 @@ class ModelManager:
             )
             raise
     
-    def _classify_risk_level(self, anomaly_score: float) -> str:
-        """Classify risk level based on anomaly score.
-        
-        Args:
-            anomaly_score: Anomaly score from model (-1 = anomaly, 1 = normal)
-            
-        Returns:
-            Risk level string: "low", "medium", "high", "critical"
-        """
-        # Note: anomaly_score is typically negative for anomalies
-        # We'll use the absolute value for classification
-        abs_score = abs(anomaly_score)
-        
-        if abs_score >= self.high_risk_threshold:
-            return "critical"
-        elif abs_score >= self.anomaly_threshold:
-            return "high"
-        elif abs_score >= self.anomaly_threshold * 0.5:
-            return "medium"
-        else:
-            return "low"
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the currently loaded model.
@@ -861,7 +845,7 @@ class ModelManager:
         Returns:
             List of human-readable explanation strings (e.g. "bytes_out (+4.2s)").
         """
-        if not self._scaler or not hasattr(self._scaler, 'mean_') or not hasattr(self._scaler, 'scale_'):
+        if not self._scaler or not hasattr(self._scaler, 'mean_') or not hasattr(self._scaler, 'scale_'):  # noqa: E501
             return ["Explanation unavailable (no scaler stats)"]
 
         try:
