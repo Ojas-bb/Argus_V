@@ -103,6 +103,19 @@ class HealthMonitor:
         self._monitor_thread = threading.Thread(target=self._monitor_worker, daemon=True)
         self._monitor_thread.start()
         logger.info("Started health monitoring")
+
+    def _run_health_check(self) -> None:
+        """Manually trigger a health check (mostly for testing)."""
+        if self._current_metrics:
+            self.update_metrics(
+                interface_available=self._current_metrics.interface_available,
+                packets_captured=self._current_metrics.packets_captured,
+                packets_processed=self._current_metrics.packets_processed,
+                packets_dropped=self._current_metrics.packets_dropped,
+                flows_in_queue=self._current_metrics.flows_in_queue,
+                current_window_packets=self._current_metrics.current_window_packets,
+            )
+        self._check_resolved_alerts()
     
     def stop_monitoring(self) -> None:
         """Stop health monitoring."""

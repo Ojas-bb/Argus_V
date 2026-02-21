@@ -136,6 +136,15 @@ class TestWindowAggregator:
             window_seconds=5,
             anonymization_salt=b"test_salt",
         )
+
+    def _wait_for_packets(self, count: int, timeout: float = 2.0):
+        """Wait for aggregator to process packets."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            stats = self.aggregator.get_stats()
+            if stats["packets_processed"] >= count:
+                return
+            time.sleep(0.1)
     
     def test_aggregator_initialization(self):
         """Test aggregator initialization."""
@@ -181,6 +190,8 @@ class TestWindowAggregator:
         result = self.aggregator.add_packet(packet)
         assert result is True
         
+        self._wait_for_packets(1)
+
         # Check statistics
         stats = self.aggregator.get_stats()
         assert stats["packets_processed"] == 1
@@ -206,6 +217,8 @@ class TestWindowAggregator:
             )
             self.aggregator.add_packet(packet)
         
+        self._wait_for_packets(5)
+
         # Check statistics
         stats = self.aggregator.get_stats()
         assert stats["packets_processed"] == 5
@@ -240,6 +253,8 @@ class TestWindowAggregator:
             )
             self.aggregator.add_packet(packet)
         
+        self._wait_for_packets(3)
+
         # Force flush to check window completion
         self.aggregator._flush_current_window()
         
@@ -295,6 +310,8 @@ class TestWindowAggregator:
         )
         self.aggregator.add_packet(packet)
         
+        self._wait_for_packets(1)
+
         # Force flush to trigger callback
         self.aggregator._flush_current_window()
         

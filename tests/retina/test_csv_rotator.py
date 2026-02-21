@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import tempfile
+import os
+import time
 from pathlib import Path
 
 from argus_v.retina.aggregator import WindowStats
@@ -88,6 +90,7 @@ class TestMythologicalCSVRotator:
         
         # Write window stats
         self.rotator.write_window_stats(window_stats, flow_data)
+        self.rotator.flush()  # Ensure data is written to disk
         
         # Check that file was created
         files = self.rotator.list_files()
@@ -222,9 +225,8 @@ class TestFirebaseCSVStager:
         test_file.write_text("test,data\n1,2\n")
         
         # Set file modification time to be old (staged)
-        import time
         old_time = time.time() - 120  # 2 minutes ago
-        test_file.utime((old_time, old_time))
+        os.utime(test_file, (old_time, old_time))
         
         # Stage files
         staged_files = self.stager.stage_completed_files()
@@ -273,9 +275,8 @@ class TestFirebaseCSVStager:
         test_file.write_text("test,data\n1,2\n")
         
         # Set recent modification time (30 seconds ago)
-        import time
         recent_time = time.time() - 30
-        test_file.utime((recent_time, recent_time))
+        os.utime(test_file, (recent_time, recent_time))
         
         # Stage files
         staged_files = self.stager.stage_completed_files()

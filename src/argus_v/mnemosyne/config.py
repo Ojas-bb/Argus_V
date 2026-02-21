@@ -57,6 +57,12 @@ class MnemosyneFirebaseConfig:
             get_required(data, "service_account_path", path=path),
             path=f"{path}.service_account_path",
         )
+
+        # Perform environment variable substitution
+        if service_account_path_raw.startswith("${") and service_account_path_raw.endswith("}"):
+            var_name = service_account_path_raw[2:-1]
+            service_account_path_raw = env.get(var_name, service_account_path_raw)
+
         service_account_path = os.path.expanduser(service_account_path_raw)
         
         training_data_path = require_non_empty_str(

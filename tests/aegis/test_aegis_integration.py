@@ -433,6 +433,8 @@ class TestFirebaseSyncIntegration:
         
         anonymizer = HashAnonymizer(salt="test-export")
         
+        blacklist_manager = BlacklistManager(self.enforcement_config, anonymizer)
+
         # Override paths for testing - RE-INIT DB after path change
         blacklist_manager._sqlite_db_path = self.temp_dir / "test_export.db"
         blacklist_manager._json_cache_path = self.temp_dir / "test_export.json"

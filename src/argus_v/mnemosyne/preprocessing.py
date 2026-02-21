@@ -64,7 +64,11 @@ class FlowPreprocessor:
         features_df = df[list(feature_columns)].copy()
 
         # Handle protocol as categorical feature (if present)
-        if "protocol" in features_df.columns and features_df["protocol"].dtype == object:
+        # Check if column contains strings
+        if "protocol" in features_df.columns and (
+            features_df["protocol"].dtype == object or
+            pd.api.types.is_string_dtype(features_df["protocol"])
+        ):
             protocol_map = {
                 "TCP": 1,
                 "UDP": 2,

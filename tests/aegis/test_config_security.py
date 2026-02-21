@@ -18,6 +18,7 @@ prediction:
   anomaly_threshold: 0.5
 runtime:
   log_level: "INFO"
+  anonymization_salt: "test-default-salt"
 """)
         config_path = f.name
 
@@ -28,7 +29,8 @@ runtime:
             "ARGUS_BLACKLIST_JSON_PATH": "/tmp/custom/blacklist.json",
             "ARGUS_FEEDBACK_DIR": "/tmp/custom/feedback",
             "ARGUS_RETRAIN_FLAG_FILE": "/tmp/custom/trigger_retrain",
-            "ARGUS_EMERGENCY_STOP_FILE": "/tmp/custom/emergency.stop"
+            "ARGUS_EMERGENCY_STOP_FILE": "/tmp/custom/emergency.stop",
+            "ARGUS_ANONYMIZATION_SALT": "env-salt"
         }
 
         for k, v in env.items():
@@ -41,6 +43,15 @@ runtime:
         assert config.enforcement.feedback_dir == "/tmp/custom/feedback"
         assert config.enforcement.retrain_flag_file == "/tmp/custom/trigger_retrain"
         assert config.enforcement.emergency_stop_file == "/tmp/custom/emergency.stop"
+
+        # Salt from config takes precedence over env var in load_aegis_config implementation for runtime section,
+        # BUT EnforcementConfig logic prefers its own section or env var.
+        # Let's check what we got.
+        # load_aegis_config loads salt from runtime section OR env var.
+        # Here config has "test-default-salt". Env has "env-salt".
+        # get_optional(data, key, default) returns data[key] if present.
+        # So config.anonymization_salt should be "test-default-salt".
+        assert config.anonymization_salt == "test-default-salt"
 
     finally:
         if os.path.exists(config_path):
@@ -70,10 +81,14 @@ runtime:
         monkeypatch.delenv("ARGUS_RETRAIN_FLAG_FILE", raising=False)
         monkeypatch.delenv("ARGUS_EMERGENCY_STOP_FILE", raising=False)
 
+        # Set mandatory salt (not present in config, must be in env)
+        monkeypatch.setenv("ARGUS_ANONYMIZATION_SALT", "default-salt")
+
         config = load_aegis_config(config_path)
 
         assert config.enforcement.blacklist_db_path == "/var/lib/argus/aegis/blacklist.db"
         assert config.enforcement.blacklist_json_path == "/var/lib/argus/aegis/blacklist.json"
+        assert config.anonymization_salt == "default-salt"
 
     finally:
         if os.path.exists(config_path):

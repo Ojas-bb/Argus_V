@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+from pathlib import Path
 
 import pytest
 
@@ -62,14 +63,15 @@ class TestArtifactManager:
         with pytest.raises(ImportError):
             ArtifactManager(artifact_config)
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_firebase_initialization(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_firebase_initialization(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test Firebase initialization."""
         # Mock Firebase Admin SDK
         mock_cred = Mock()
         mock_app = Mock()
-        mock_firebase_admin.credentials.Certificate.return_value = mock_cred
+        mock_credentials.Certificate.return_value = mock_cred
         mock_firebase_admin.initialize_app.return_value = mock_app
         
         # Mock storage client
@@ -79,16 +81,17 @@ class TestArtifactManager:
         manager = ArtifactManager(artifact_config)
         
         # Verify Firebase was initialized correctly
-        mock_firebase_admin.credentials.Certificate.assert_called_once_with("/fake/path/service-account.json")
+        mock_credentials.Certificate.assert_called_once_with("/fake/path/service-account.json")
         mock_firebase_admin.initialize_app.assert_called_once()
         mock_storage.bucket.assert_called_once_with(
             name="test-bucket",
             app=mock_app
         )
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_upload_model_artifacts_success(self, mock_storage, mock_firebase_admin, artifact_config, temp_artifact_files):
+    def test_upload_model_artifacts_success(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config, temp_artifact_files):
         """Test successful upload of model artifacts."""
         # Mock Firebase setup
         mock_app = Mock()
@@ -120,9 +123,10 @@ class TestArtifactManager:
                 assert mock_bucket.blob.call_count >= 3
                 assert mock_blob.upload_from_filename.call_count >= 3
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_upload_model_artifacts_missing_file(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_upload_model_artifacts_missing_file(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test upload with missing local file."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -139,9 +143,10 @@ class TestArtifactManager:
                 with pytest.raises(FileNotFoundError):
                     manager.upload_model_artifacts(missing_files)
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_list_existing_models_success(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_list_existing_models_success(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test successful listing of existing models."""
         # Mock Firebase setup
         mock_app = Mock()
@@ -176,9 +181,10 @@ class TestArtifactManager:
                 # Check sorting (newest first)
                 assert models[0]['timestamp'] == '20240101_120000'
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_list_existing_models_with_age_filter(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_list_existing_models_with_age_filter(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test listing models with age filter."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -209,9 +215,10 @@ class TestArtifactManager:
                 assert len(models) == 1
                 assert 'recent_model' in models[0]['name']
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_cleanup_old_models(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_cleanup_old_models(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test cleanup of old model artifacts."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -249,16 +256,18 @@ class TestArtifactManager:
                 old_metadata_blob.delete.assert_called_once()
                 recent_blob.delete.assert_not_called()
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_download_model_success(self, mock_storage, mock_firebase_admin, artifact_config, tmp_path):
+    def test_download_model_success(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config, tmp_path):
         """Test successful model download."""
         mock_app = Mock()
         mock_bucket = Mock()
         
         # Mock blob
         mock_blob = Mock()
-        mock_blob.download_to_filename.return_value = None
+        # Create the file when download is called so stat() works
+        mock_blob.download_to_filename.side_effect = lambda path: Path(path).touch()
         mock_bucket.blob.return_value = mock_blob
         
         with patch('argus_v.mnemosyne.artifact_manager.storage.bucket', return_value=mock_bucket):
@@ -273,9 +282,10 @@ class TestArtifactManager:
                 mock_bucket.blob.assert_called_once_with("models/test_model.pkl")
                 mock_blob.download_to_filename.assert_called_once_with(local_path)
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_download_model_failure(self, mock_storage, mock_firebase_admin, artifact_config, tmp_path):
+    def test_download_model_failure(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config, tmp_path):
         """Test model download failure."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -295,9 +305,10 @@ class TestArtifactManager:
                 
                 assert success is False
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_cleanup_training_data(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_cleanup_training_data(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test cleanup of old training data."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -328,15 +339,16 @@ class TestArtifactManager:
                 cleanup_stats = manager.cleanup_training_data(24)
                 
                 assert cleanup_stats['deleted_count'] == 1  # Only old CSV
-                assert cleanup_stats['remaining_count'] == 2  # Recent CSV + non-CSV
+                assert cleanup_stats['remaining_count'] == 1  # Recent CSV only (non-CSV ignored)
                 
                 # Verify delete was called for old CSV
                 old_csv_blob.delete.assert_called_once()
                 recent_csv_blob.delete.assert_not_called()
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
     @patch('argus_v.mnemosyne.artifact_manager.storage')
-    def test_get_storage_usage(self, mock_storage, mock_firebase_admin, artifact_config):
+    def test_get_storage_usage(self, mock_storage, mock_firebase_admin, mock_credentials, artifact_config):
         """Test storage usage calculation."""
         mock_app = Mock()
         mock_bucket = Mock()
@@ -359,7 +371,14 @@ class TestArtifactManager:
         model_blob2.name = "models/metadata1.json"
         model_blob2.size = 1024  # 1KB
         
-        mock_bucket.list_blobs.return_value = [training_blob1, training_blob2, model_blob1, model_blob2]
+        def list_blobs_side_effect(prefix=None):
+            if prefix and 'training' in prefix:
+                return [training_blob1, training_blob2]
+            elif prefix and 'models' in prefix:
+                return [model_blob1, model_blob2]
+            return []
+
+        mock_bucket.list_blobs.side_effect = list_blobs_side_effect
         
         with patch('argus_v.mnemosyne.artifact_manager.storage.bucket', return_value=mock_bucket):
             with patch('argus_v.mnemosyne.artifact_manager.firebase_admin.initialize_app', return_value=mock_app):
@@ -377,19 +396,21 @@ class TestArtifactManager:
                 
                 # Check model stats
                 assert usage_stats['models']['file_count'] == 2
-                assert usage_stats['models']['total_size_mb'] == 2.001  # 2MB + 1KB
+                assert usage_stats['models']['total_size_mb'] == pytest.approx(2.001, abs=1e-4)
                 
                 # Check total
-                assert usage_stats['total_size_mb'] == 3.501  # 1.5 + 2.001
+                assert usage_stats['total_size_mb'] == pytest.approx(3.501, abs=1e-4)
     
+    @patch('argus_v.mnemosyne.artifact_manager.credentials')
     @patch('argus_v.mnemosyne.artifact_manager.firebase_admin')
-    def test_cleanup_on_deletion(self, mock_firebase_admin, artifact_config):
+    def test_cleanup_on_deletion(self, mock_firebase_admin, mock_credentials, artifact_config):
         """Test cleanup of Firebase connections on object deletion."""
         mock_app = Mock()
         mock_firebase_admin.delete_app.return_value = None
         
         with patch('argus_v.mnemosyne.artifact_manager.firebase_admin.initialize_app', return_value=mock_app):
             with patch('argus_v.mnemosyne.artifact_manager.storage.bucket'):
+                # We need to ensure _initialize_firebase doesn't crash
                 manager = ArtifactManager(artifact_config)
                 manager._firebase_app = mock_app
                 

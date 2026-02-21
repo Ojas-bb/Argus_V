@@ -22,7 +22,7 @@ MYTHOLOGICAL_NAMES = [
     "ares", "hephaestus", "hermes", "dionysus", "demeter", "hestia",
     # Norse  
     "odin", "thor", "loki", "freyja", "frigg", "tyr", "heimdall", "baldr",
-    "hodr", "vidar", "vali", "halla", "sif", "heimdall",
+    "hodr", "vidar", "vali", "halla", "sif",
     # Egyptian
     "ra", "osiris", "isis", "horus", "set", "anubis", "thoth", "bastet",
     "sekhmet", "hathor", "nephthys", "ptah", "sobek", "nut",
@@ -294,9 +294,9 @@ class MythologicalCSVRotator:
         """Extract the mythological name from a filename."""
         # Expected format: {prefix}_{name}_{timestamp}.csv
         parts = filename.replace(".csv", "").split("_")
-        if len(parts) >= 3:
-            potential_name = parts[1]
-            return potential_name if potential_name in MYTHOLOGICAL_NAMES else None
+        for part in parts:
+            if part in MYTHOLOGICAL_NAMES:
+                return part
         return None
     
     def __enter__(self):
