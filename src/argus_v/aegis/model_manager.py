@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    import firebase_admin
-    from firebase_admin import credentials, storage
-    from google.cloud import storage as gcs
+    import firebase_admin  # noqa: F401
+    from firebase_admin import credentials, storage  # noqa: F401
+    from google.cloud import storage as gcs  # noqa: F401
     FIREBASE_AVAILABLE = True
 except ImportError:
     FIREBASE_AVAILABLE = False
@@ -810,6 +810,28 @@ class ModelManager:
             )
             raise
     
+
+    def _classify_risk_level(self, anomaly_score: float) -> str:
+        """Classify risk level based on anomaly score.
+
+        Args:
+            anomaly_score: Anomaly score from model (-1 = anomaly, 1 = normal)
+
+        Returns:
+            Risk level string: "low", "medium", "high", "critical"
+        """
+        # Note: anomaly_score is typically negative for anomalies
+        # We'll use the absolute value for classification
+        abs_score = abs(anomaly_score)
+
+        if abs_score >= self.high_risk_threshold:
+            return "critical"
+        elif abs_score >= self.anomaly_threshold:
+            return "high"
+        elif abs_score >= self.anomaly_threshold * 0.5:
+            return "medium"
+        else:
+            return "low"
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the currently loaded model.
