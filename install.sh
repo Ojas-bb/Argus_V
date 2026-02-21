@@ -115,6 +115,47 @@ strip_ansi() {
     printf '%s' "$value" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tr -d '\x1b'
 }
 
+# Generate a cryptographically secure 32-byte hex salt (64 chars)
+generate_secure_salt() {
+    # Method 1: OpenSSL (Standard and preferred)
+    if command -v openssl >/dev/null 2>&1; then
+        local ssl_salt
+        if ssl_salt=$(openssl rand -hex 32 2>/dev/null); then
+            if [[ -n "$ssl_salt" ]]; then
+                echo "$ssl_salt"
+                return 0
+            fi
+        fi
+    fi
+
+    # Method 2: Python secrets (Reliable alternative, Python is a dependency)
+    # variable PYTHON_BIN is set by check_python
+    local py_bin="${PYTHON_BIN:-python3}"
+    if command -v "$py_bin" >/dev/null 2>&1; then
+        local py_salt
+        if py_salt=$("$py_bin" -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null); then
+             if [[ -n "$py_salt" ]]; then
+                echo "$py_salt"
+                return 0
+            fi
+        fi
+    fi
+
+    # Method 3: /dev/urandom (Linux standard fallback)
+    if [[ -r /dev/urandom ]]; then
+        # Read from urandom, filter for hex chars, take first 64
+        local urandom_salt
+        urandom_salt=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 64)
+        if [[ ${#urandom_salt} -eq 64 ]]; then
+            echo "$urandom_salt"
+            return 0
+        fi
+    fi
+
+    # If we get here, we cannot generate a secure salt
+    return 1
+}
+
 get_validation_python() {
     if [[ -x "$VENV_DIR/bin/python" ]]; then
         echo "$VENV_DIR/bin/python"
@@ -526,7 +567,10 @@ get_interactive_config() {
     fi
     
     # IP salt for anonymization - must be hex-only (0-9, a-f)
-    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
+    if ! RANDOM_SALT=$(generate_secure_salt); then
+        die "Failed to generate secure random salt. Please check your system's entropy source."
+    fi
+
     read -p "IP anonymization salt [randomly generated]: " IP_SALT
     IP_SALT=${IP_SALT:-$RANDOM_SALT}
     # Sanitize: strip ANSI codes and ensure only hex characters
@@ -572,8 +616,9 @@ get_noninteractive_config() {
     FIREBASE_SERVICE_ACCOUNT=""
     
     # IP salt for anonymization - must be hex-only (0-9, a-f)
-    # Use openssl for cryptographically secure random, fall back to date-based hex
-    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
+    if ! RANDOM_SALT=$(generate_secure_salt); then
+        die "Failed to generate secure random salt. Please check your system's entropy source."
+    fi
     IP_SALT="$RANDOM_SALT"
     # Ensure it's lowercase and exactly 64 chars (32 bytes hex)
     IP_SALT=$(printf '%s' "$IP_SALT" | tr '[:upper:]' '[:lower:]')
