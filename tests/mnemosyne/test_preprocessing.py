@@ -20,6 +20,7 @@ def preprocessing_config():
     config.min_samples_for_training = 1000
     config.max_model_size_mb = 100
     config.random_state = 42
+    config.feature_columns = None  # Ensure this is not a Mock object
     return config
 
 
@@ -135,14 +136,22 @@ class TestFlowPreprocessor:
     def test_detect_feature_outliers(self, preprocessing_config, sample_flow_df):
         """Test outlier detection and removal."""
         preprocessor = FlowPreprocessor(preprocessing_config)
-        features_df = preprocessor.prepare_features(sample_flow_df)
         
-        # Add some outlier data
-        outlier_data = sample_flow_df.copy()
-        outlier_data.loc[0, 'bytes_in'] = 1000000  # Extreme outlier
+        # Create larger dataset for reliable outlier detection
+        # 10 normal samples, 1 extreme outlier
+        normal_data = pd.concat([sample_flow_df] * 5, ignore_index=True)
+        outlier_data = normal_data.copy()
+        # Make outlier very extreme compared to others (log scale)
+        # Normal bytes_in: 1000 (log~6.9), 5000 (log~8.5)
+        # Outlier: 10^9 (log~20.7)
+        outlier_data.loc[0, 'bytes_in'] = 10**9
         
         outlier_features = preprocessor.prepare_features(outlier_data)
-        clean_df, stats = preprocessor.detect_feature_outliers(outlier_features)
+
+        # Log transform first as the pipeline does
+        log_features = preprocessor.apply_log_transform(outlier_features)
+
+        clean_df, stats = preprocessor.detect_feature_outliers(log_features)
         
         assert 'total_outliers' in stats
         assert 'outliers_by_feature' in stats

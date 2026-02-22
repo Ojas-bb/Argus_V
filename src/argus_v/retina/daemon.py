@@ -229,6 +229,7 @@ class RetinaDaemon:
                 # Write to CSV
                 self._csv_rotator.write_window_stats(window_stats, flow_data)
                 self._stats["windows_completed"] += 1
+                self._stats["total_packets_processed"] += window_stats.packet_count
                 
                 # Log completion
                 self.logger.debug(

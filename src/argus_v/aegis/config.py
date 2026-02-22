@@ -595,14 +595,14 @@ def load_aegis_config(
     anonymization_salt = get_optional(
         runtime_data,
         "anonymization_salt",
-        os.environ.get("AEGIS_SALT")
+        os.environ.get("ARGUS_ANONYMIZATION_SALT")
     )
 
     if not anonymization_salt:
         raise ValidationError([
             ValidationIssue(
                 "$.runtime.anonymization_salt",
-                "Anonymization salt is required in config or AEGIS_SALT env var"
+                "Anonymization salt is required in config or ARGUS_ANONYMIZATION_SALT env var"
             )
         ])
     

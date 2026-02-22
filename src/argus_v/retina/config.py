@@ -107,6 +107,7 @@ class AggregationConfig:
 class HealthConfig:
     """Health monitoring configuration."""
     
+    check_interval_seconds: int = 60
     max_drop_rate_percent: float = 1.0
     max_flow_queue_size: int = 1000
     alert_cooldown_seconds: int = 300
@@ -115,6 +116,11 @@ class HealthConfig:
     
     @staticmethod
     def from_mapping(data: Mapping[str, Any], *, path: str) -> "HealthConfig":
+        check_interval_seconds = require_positive_int(
+            get_optional(data, "check_interval_seconds", default=60),
+            path=f"{path}.check_interval_seconds",
+        )
+
         max_drop_rate_percent = get_optional(data, "max_drop_rate_percent", default=1.0)
         if not isinstance(max_drop_rate_percent, (int, float)):
             raise ValidationError([ValidationIssue(f"{path}.max_drop_rate_percent", "must be a number")])
@@ -140,6 +146,7 @@ class HealthConfig:
         )
         
         return HealthConfig(
+            check_interval_seconds=check_interval_seconds,
             max_drop_rate_percent=max_drop_rate_percent,
             max_flow_queue_size=max_flow_queue_size,
             alert_cooldown_seconds=alert_cooldown_seconds,

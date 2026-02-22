@@ -82,6 +82,16 @@ class BlacklistManager:
         
         self._iptables_available: Optional[bool] = None
 
+        # Initialize anonymizer
+        if anonymizer:
+            self.anonymizer = anonymizer
+        else:
+            # Check for salt in config
+            salt = getattr(config, "anonymization_salt", None)
+            if not salt:
+                raise ValueError("Anonymization salt must be configured")
+            self.anonymizer = HashAnonymizer(salt)
+
         # Initialize storage systems
         self._ensure_directories()
         self._initialize_database()
@@ -219,7 +229,9 @@ class BlacklistManager:
                     (ip_address, reason, source, risk_level, expires_at, is_active, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    anonymized_ip, reason, source, risk_level, expires_at, True,
+                    anonymized_ip, reason, source, risk_level,
+                    expires_at.isoformat() if expires_at else None,
+                    True,
                     json.dumps(metadata) if metadata else None
                 ))
                 
@@ -877,8 +889,9 @@ class BlacklistManager:
         
         # Check if service start time indicates within dry run period
         # This would be implemented based on actual service start tracking
-        # For now, assume dry run is always enabled unless explicitly disabled
-        return True  # Conservative approach - default to dry run
+        # For now, assume not in dry run unless emergency stop is present
+        # The Daemon class handles the time-based dry run logic by configuring enforcement
+        return False
     
     def _update_stats(self) -> None:
         """Update internal statistics."""

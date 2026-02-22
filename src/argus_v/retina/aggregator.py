@@ -269,6 +269,17 @@ class WindowAggregator:
         if self._current_window_start is None:
             return
         
+        # Ensure we have processed everything in the queue before flushing window statistics
+        # But only if called manually (not from worker loop), otherwise we might deadlock waiting for ourselves
+        if not self._processing and not self._packet_queue.empty():
+             # Drain queue
+             try:
+                 while True:
+                     packet = self._packet_queue.get_nowait()
+                     self._process_packet(packet)
+             except:
+                 pass
+
         current_time = time.time()
         window_end = self._current_window_start + self.window_seconds
         duration = window_end - self._current_window_start

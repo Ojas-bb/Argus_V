@@ -1,7 +1,7 @@
 """Unit tests for mnemosyne data loading module."""
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
 import pandas as pd
 import pytest
@@ -55,14 +55,15 @@ class TestFirebaseDataLoader:
         with pytest.raises(ImportError):
             FirebaseDataLoader(firebase_config)
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
-    def test_firebase_initialization(self, mock_storage, mock_firebase_admin, firebase_config):
+    def test_firebase_initialization(self, mock_storage, mock_firebase_admin, mock_credentials, firebase_config):
         """Test Firebase initialization."""
         # Mock Firebase Admin SDK
         mock_cred = Mock()
         mock_app = Mock()
-        mock_firebase_admin.credentials.Certificate.return_value = mock_cred
+        mock_credentials.Certificate.return_value = mock_cred
         mock_firebase_admin.initialize_app.return_value = mock_app
         
         # Mock storage client
@@ -72,16 +73,17 @@ class TestFirebaseDataLoader:
         loader = FirebaseDataLoader(firebase_config)
         
         # Verify Firebase was initialized correctly
-        mock_firebase_admin.credentials.Certificate.assert_called_once_with("/fake/path/service-account.json")
+        mock_credentials.Certificate.assert_called_once_with("/fake/path/service-account.json")
         mock_firebase_admin.initialize_app.assert_called_once()
         mock_storage.bucket.assert_called_once_with(
             name="test-bucket",
             app=mock_app
         )
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
-    def test_list_training_csvs_no_files(self, mock_storage, mock_firebase_admin, firebase_config):
+    def test_list_training_csvs_no_files(self, mock_storage, mock_firebase_admin, mock_credentials, firebase_config):
         """Test listing training CSV files when none exist."""
         # Mock storage bucket
         mock_bucket = Mock()
@@ -98,9 +100,10 @@ class TestFirebaseDataLoader:
             assert files[0] == "flows/training/test.csv"
             mock_bucket.list_blobs.assert_called_once_with(prefix="flows/training/")
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
-    def test_list_training_csvs_with_age_filter(self, mock_storage, mock_firebase_admin, firebase_config):
+    def test_list_training_csvs_with_age_filter(self, mock_storage, mock_firebase_admin, mock_credentials, firebase_config):
         """Test listing training CSV files with age filter."""
         mock_bucket = Mock()
         
@@ -123,10 +126,11 @@ class TestFirebaseDataLoader:
             assert len(files) == 1
             assert files[0] == "flows/training/new.csv"
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
     @patch('pandas.read_csv')
-    def test_load_csv_flows_success(self, mock_read_csv, mock_storage, mock_firebase_admin, firebase_config, sample_flow_data):
+    def test_load_csv_flows_success(self, mock_read_csv, mock_storage, mock_firebase_admin, mock_credentials, firebase_config, sample_flow_data):
         """Test successful loading of CSV flows."""
         mock_read_csv.return_value = sample_flow_data
         
@@ -143,10 +147,11 @@ class TestFirebaseDataLoader:
             assert len(dataframes[0]) == 3  # 3 rows
             assert list(dataframes[0].columns) == list(sample_flow_data.columns)
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
     @patch('pandas.read_csv')
-    def test_load_csv_flows_missing_columns(self, mock_read_csv, mock_storage, mock_firebase_admin, firebase_config):
+    def test_load_csv_flows_missing_columns(self, mock_read_csv, mock_storage, mock_firebase_admin, mock_credentials, firebase_config, sample_flow_data):
         """Test CSV loading with missing columns."""
         # Create data with missing columns
         incomplete_data = {
@@ -175,10 +180,11 @@ class TestFirebaseDataLoader:
             # Should return empty list due to missing columns
             assert len(dataframes) == 0
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
     @patch('pandas.read_csv')
-    def test_load_csv_flows_with_invalid_data(self, mock_read_csv, mock_storage, mock_firebase_admin, firebase_config):
+    def test_load_csv_flows_with_invalid_data(self, mock_read_csv, mock_storage, mock_firebase_admin, mock_credentials, firebase_config, sample_flow_data):
         """Test CSV loading with invalid data."""
         # Create data with NaN and negative values
         data = {
@@ -208,10 +214,11 @@ class TestFirebaseDataLoader:
             assert len(dataframes) == 1
             assert len(dataframes[0]) == 1  # Only valid row remains
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
     @patch('argus_v.mnemosyne.data_loader.FirebaseDataLoader.load_csv_flows')
-    def test_combine_flows_success(self, mock_load_csv, mock_storage, mock_firebase_admin, firebase_config, sample_flow_data):
+    def test_combine_flows_success(self, mock_load_csv, mock_storage, mock_firebase_admin, mock_credentials, firebase_config, sample_flow_data):
         """Test successful combination of flow data."""
         # Mock two identical DataFrames
         mock_load_csv.return_value = iter([
@@ -226,10 +233,11 @@ class TestFirebaseDataLoader:
             assert len(combined_df) == 3  # Duplicates removed
             assert list(combined_df.columns) == list(sample_flow_data.columns)
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
     @patch('argus_v.mnemosyne.data_loader.FirebaseDataLoader.load_csv_flows')
-    def test_combine_flows_no_valid_data(self, mock_load_csv, mock_storage, mock_firebase_admin, firebase_config):
+    def test_combine_flows_no_valid_data(self, mock_load_csv, mock_storage, mock_firebase_admin, mock_credentials, firebase_config):
         """Test combining flows when no valid data is found."""
         mock_load_csv.return_value = iter([])  # Empty iterator
         
@@ -239,9 +247,10 @@ class TestFirebaseDataLoader:
             with pytest.raises(ValueError, match="No valid flow data found"):
                 loader.combine_flows(["empty.csv"])
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
     @patch('argus_v.mnemosyne.data_loader.storage')
-    def test_delete_old_training_data(self, mock_storage, mock_firebase_admin, firebase_config):
+    def test_delete_old_training_data(self, mock_storage, mock_firebase_admin, mock_credentials, firebase_config):
         """Test deletion of old training data."""
         mock_bucket = Mock()
         
@@ -267,8 +276,9 @@ class TestFirebaseDataLoader:
             old_blob.delete.assert_called_once()
             recent_blob.delete.assert_not_called()
     
+    @patch('argus_v.mnemosyne.data_loader.credentials')
     @patch('argus_v.mnemosyne.data_loader.firebase_admin')
-    def test_cleanup_on_deletion(self, mock_firebase_admin, firebase_config):
+    def test_cleanup_on_deletion(self, mock_firebase_admin, mock_credentials, firebase_config):
         """Test cleanup of Firebase connections on object deletion."""
         mock_app = Mock()
         mock_firebase_admin.delete_app.return_value = None

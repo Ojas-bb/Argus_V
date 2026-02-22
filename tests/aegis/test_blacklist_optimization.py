@@ -13,7 +13,8 @@ class TestBlacklistOptimization:
             'iptables_chain_name': 'TEST-CHAIN',
             'blacklist_db_path': str(self.temp_dir / "blacklist.db"),
             'blacklist_json_path': str(self.temp_dir / "blacklist.json"),
-            'emergency_stop_file': str(self.temp_dir / "emergency.stop")
+            'emergency_stop_file': str(self.temp_dir / "emergency.stop"),
+            'anonymization_salt': 'test-salt'
         })()
 
     def teardown_method(self):
