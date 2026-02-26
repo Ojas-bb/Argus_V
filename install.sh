@@ -115,6 +115,34 @@ strip_ansi() {
     printf '%s' "$value" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tr -d '\x1b'
 }
 
+# Generate a cryptographically secure 32-byte hex salt (64 chars)
+generate_secure_salt() {
+    # Method 1: OpenSSL (Standard and preferred)
+    if command -v openssl >/dev/null 2>&1; then
+        local ssl_salt
+        if ssl_salt=$(openssl rand -hex 32 2>/dev/null); then
+            if [[ -n "$ssl_salt" ]]; then
+                echo "$ssl_salt"
+                return 0
+            fi
+        fi
+    fi
+
+    # Method 2: /dev/urandom (Linux standard fallback)
+    if [[ -r /dev/urandom ]]; then
+        # Read from urandom, filter for hex chars, take first 64
+        local urandom_salt
+        urandom_salt=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 64)
+        if [[ ${#urandom_salt} -eq 64 ]]; then
+            echo "$urandom_salt"
+            return 0
+        fi
+    fi
+
+    # If we get here, we cannot generate a secure salt
+    return 1
+}
+
 get_validation_python() {
     if [[ -x "$VENV_DIR/bin/python" ]]; then
         echo "$VENV_DIR/bin/python"
@@ -422,10 +450,14 @@ check_python() {
     minor=$($PYTHON_BIN -c 'import sys; print(sys.version_info[1])')
 
     if [[ $major -ne 3 ]] || [[ $minor -lt 11 ]]; then
-        die "Python 3.11+ is required to run this ARGUS_V build. Please upgrade Python and re-run the installer."
+        # Check if we meet the minimum 3.8 requirement (which was checked earlier, but we re-verify here)
+        if [[ $major -lt 3 ]] || [[ $major -eq 3 && $minor -lt 8 ]]; then
+             die "Python 3.8 or later is required. Found: ${PYTHON_VERSION}"
+        fi
+        warn "Python 3.11+ is recommended for ARGUS_V. Running with ${PYTHON_VERSION} may have limited functionality."
+    else
+        success "Python version check passed (${PYTHON_BIN})"
     fi
-
-    success "Python version check passed (${PYTHON_BIN})"
 }
 
 # Install system dependencies
@@ -526,7 +558,10 @@ get_interactive_config() {
     fi
     
     # IP salt for anonymization - must be hex-only (0-9, a-f)
-    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
+    if ! RANDOM_SALT=$(generate_secure_salt); then
+        die "Failed to generate secure random salt. Please check your system's entropy source."
+    fi
+
     read -p "IP anonymization salt [randomly generated]: " IP_SALT
     IP_SALT=${IP_SALT:-$RANDOM_SALT}
     # Sanitize: strip ANSI codes and ensure only hex characters
@@ -572,8 +607,9 @@ get_noninteractive_config() {
     FIREBASE_SERVICE_ACCOUNT=""
     
     # IP salt for anonymization - must be hex-only (0-9, a-f)
-    # Use openssl for cryptographically secure random, fall back to date-based hex
-    RANDOM_SALT=$(openssl rand -hex 32 2>/dev/null || printf '%032x' "$(date +%s)")
+    if ! RANDOM_SALT=$(generate_secure_salt); then
+        die "Failed to generate secure random salt. Please check your system's entropy source."
+    fi
     IP_SALT="$RANDOM_SALT"
     # Ensure it's lowercase and exactly 64 chars (32 bytes hex)
     IP_SALT=$(printf '%s' "$IP_SALT" | tr '[:upper:]' '[:lower:]')
